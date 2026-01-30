@@ -2,6 +2,41 @@
 
 ICT 5th 2team project - React + Spring Boot + JDBC + MySQL
 
+## 📚 문서 (Documentation)
+
+- **[README.md](README.md)** - 이 파일: 프로젝트 개요 및 빠른 시작
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - 상세한 설치 및 실행 가이드
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - 시스템 아키텍처 및 데이터 흐름 설명
+- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - 프로젝트 완성도 및 보안 검증 결과
+
+## ⚡ 빠른 시작 (Quick Start)
+
+### 필수 요구사항
+- JDK 17+
+- Maven 3.6+
+- Node.js 14+
+- MySQL 8.0+
+
+### 1. 데이터베이스 설정
+```bash
+mysql -u root -p < backend/src/main/resources/schema.sql
+```
+
+### 2. 백엔드 실행
+```bash
+cd backend
+mvn spring-boot:run
+```
+서버: http://localhost:8080
+
+### 3. 프론트엔드 실행 (새 터미널)
+```bash
+cd frontend
+npm install
+npm start
+```
+앱: http://localhost:3000
+
 ## 프로젝트 구조
 
 ```
@@ -34,13 +69,23 @@ ict2/
 ### Backend
 - Spring Boot 3.2.1
 - Spring JDBC
+- Spring Validation
 - MySQL 8.x
 - Maven
 
 ### Frontend
 - React 18.2.0
-- Axios
+- Axios 1.13.4
 - React Scripts
+
+## ✅ 보안 검증 완료
+
+- ✅ npm 패키지: 취약점 없음
+- ✅ Maven 패키지: 취약점 없음
+- ✅ CodeQL 분석: 경고 없음
+- ✅ 환경 변수를 통한 자격 증명 관리
+- ✅ Bean Validation 입력 검증
+- ✅ SQL Injection 방지
 
 ## 설치 및 실행 방법
 
