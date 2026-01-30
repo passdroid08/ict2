@@ -143,6 +143,27 @@ Network Error
 - 백엔드: 8080 포트가 이미 사용 중이면 `application.properties`에서 `server.port` 변경
 - 프론트엔드: 3000 포트가 사용 중이면 다른 포트 사용 제안이 표시됨
 
+## 환경 변수 설정 (Environment Variables)
+
+### 데이터베이스 연결 설정 (권장)
+운영 환경에서는 데이터베이스 자격 증명을 환경 변수로 설정하는 것이 좋습니다:
+
+```bash
+# Linux/Mac
+export DB_URL="jdbc:mysql://localhost:3306/ictdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+export DB_USERNAME="your_username"
+export DB_PASSWORD="your_password"
+
+# Windows PowerShell
+$env:DB_URL="jdbc:mysql://localhost:3306/ictdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+$env:DB_USERNAME="your_username"
+$env:DB_PASSWORD="your_password"
+```
+
+환경 변수가 설정되지 않은 경우 기본값(root/root)이 사용됩니다.
+
+**보안 참고**: 절대 데이터베이스 비밀번호를 코드에 직접 작성하지 마세요.
+
 ## 프로젝트 구조 설명
 
 ```
@@ -189,7 +210,7 @@ ict2/
 
 ### Frontend
 - **React 18.2.0** - UI 라이브러리
-- **Axios 1.6.0** - HTTP 클라이언트
+- **Axios 1.13.4** - HTTP 클라이언트
 - **React Scripts 5.0.1** - 빌드 도구
 
 ### Database
