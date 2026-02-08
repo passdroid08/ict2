@@ -1,217 +1,120 @@
-# 설치 및 실행 가이드 (Installation and Running Guide)
+# 설치 및 실행 가이드 (Oracle 버전)
 
 ## 필수 요구사항 (Prerequisites)
 
-1. **JDK 17 이상** - Spring Boot 실행을 위해 필요
-2. **Maven 3.6+** - 백엔드 빌드를 위해 필요
-3. **Node.js 14+** - React 앱 실행을 위해 필요
-4. **MySQL 8.0+** - 데이터베이스
+1. JDK 17 이상 (Spring Boot 실행)
+2. Maven 3.6+ (백엔드 빌드)
+3. Node.js 14+ (React 앱 실행)
+4. Oracle Database (로컬은 XE 권장) + SQL*Plus 또는 SQLcl
 
 ## 데이터베이스 설정 (Database Setup)
 
-### 1. MySQL 설치 후 접속
+이 프로젝트는 JDBC로 Oracle DB에 연결합니다. 기존 MySQL용 안내는 Oracle 기준으로 아래처럼 바꿔서 진행합니다.
+
+### 1) Oracle 접속
+아래는 예시입니다. 환경에 따라 서비스명(XEPDB1) 또는 SID(XE)가 다를 수 있습니다.
+
 ```bash
-mysql -u root -p
+# 서비스명(PDB) 방식 예시
+sqlplus system/비밀번호@//localhost:1521/XEPDB1
 ```
 
-### 2. 데이터베이스 및 테이블 생성
+### 2) 스키마(사용자) 및 테이블 생성
+`backend/src/main/resources/schema_oracle.sql`을 실행합니다.
+
 ```sql
--- Create database
-CREATE DATABASE IF NOT EXISTS ictdb;
-
--- Use database
-USE ictdb;
-
--- Create users table
-CREATE TABLE IF NOT EXISTS users (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Insert sample data
-INSERT INTO users (name, email) VALUES 
-    ('John Doe', 'john@example.com'),
-    ('Jane Smith', 'jane@example.com'),
-    ('Bob Johnson', 'bob@example.com');
+@backend/src/main/resources/schema_oracle.sql
 ```
 
-또는 다음 명령으로 스크립트 실행:
-```bash
-mysql -u root -p < backend/src/main/resources/schema.sql
-```
+스크립트가 하는 일:
+- 사용자(스키마) ICTDB 생성 및 권한 부여
+- users 테이블 생성 (ID는 Oracle IDENTITY 사용)
+- 샘플 데이터 3건 INSERT
 
-### 3. 데이터베이스 설정 확인
-`backend/src/main/resources/application.properties` 파일을 열어서 데이터베이스 연결 정보를 확인하고 필요시 수정하세요:
+### 3) 백엔드 DB 설정 확인
+`backend/src/main/resources/application.properties`에서 접속 정보를 확인/수정합니다.
 
+서비스명(PDB) 방식 예시:
 ```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/ictdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-spring.datasource.username=root
-spring.datasource.password=root
+spring.datasource.url=jdbc:oracle:thin:@//localhost:1521/XEPDB1
+spring.datasource.username=ICTDB
+spring.datasource.password=ictdb
+```
+
+SID 방식 예시(구버전 XE):
+```properties
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:XE
+spring.datasource.username=ICTDB
+spring.datasource.password=ictdb
 ```
 
 ## 백엔드 실행 (Backend Setup)
 
-### 1. 백엔드 디렉토리로 이동
+### 1) 백엔드 디렉토리로 이동
 ```bash
 cd backend
 ```
 
-### 2. Maven 의존성 설치 및 빌드
+### 2) 빌드
 ```bash
 mvn clean install
 ```
 
-### 3. Spring Boot 애플리케이션 실행
+### 3) 실행
 ```bash
 mvn spring-boot:run
 ```
 
-또는 JAR 파일로 실행:
-```bash
-java -jar target/project-0.0.1-SNAPSHOT.jar
-```
-
-백엔드 서버는 **http://localhost:8080** 에서 실행됩니다.
-
-### 백엔드 API 테스트
-브라우저나 curl로 테스트:
-```bash
-curl http://localhost:8080/api/users
-```
+백엔드 서버: http://localhost:8080
 
 ## 프론트엔드 실행 (Frontend Setup)
 
-### 1. 프론트엔드 디렉토리로 이동
+### 1) 프론트엔드 디렉토리로 이동
 ```bash
 cd frontend
 ```
 
-### 2. npm 패키지 설치
+### 2) 패키지 설치
 ```bash
 npm install
 ```
 
-### 3. React 개발 서버 실행
+### 3) 실행
 ```bash
 npm start
 ```
 
-프론트엔드는 **http://localhost:3000** 에서 실행되며, 자동으로 브라우저가 열립니다.
+프론트엔드: http://localhost:3000
 
-## 전체 애플리케이션 실행 순서
+## 전체 실행 순서
 
-1. **MySQL 데이터베이스 시작**
-2. **터미널 1**: 백엔드 실행
-   ```bash
-   cd backend
-   mvn spring-boot:run
-   ```
-3. **터미널 2**: 프론트엔드 실행
-   ```bash
-   cd frontend
-   npm start
-   ```
+1) Oracle DB 실행
+2) 터미널 1: backend 실행
+3) 터미널 2: frontend 실행
 
-## 주요 기능 (Features)
+## 트러블슈팅
 
-- ✅ 사용자 목록 조회
-- ✅ 새 사용자 추가
-- ✅ 사용자 정보 수정
-- ✅ 사용자 삭제
-- ✅ 반응형 UI
+### Oracle 연결 오류
+- Oracle 서비스명(SERVICE_NAME) 또는 SID가 맞는지 확인
+- 1521 포트가 열려 있는지 확인
+- 사용자/비밀번호, 계정 잠금 여부 확인
 
-## 트러블슈팅 (Troubleshooting)
+### 프론트엔드에서 백엔드 연결 실패 (Network Error)
+- 백엔드가 http://localhost:8080 에서 실행 중인지 확인
+- CORS 설정(WebConfig.java) 확인
 
-### MySQL 연결 오류
-```
-com.mysql.cj.jdbc.exceptions.CommunicationsException
-```
-- MySQL 서버가 실행 중인지 확인
-- application.properties의 데이터베이스 연결 정보 확인
-- MySQL 사용자 권한 확인
+## 환경 변수 설정 (권장)
 
-### 프론트엔드에서 백엔드 연결 실패
-```
-Network Error
-```
-- 백엔드 서버가 http://localhost:8080에서 실행 중인지 확인
-- CORS 설정이 올바른지 확인 (WebConfig.java)
-
-### 포트 충돌
-- 백엔드: 8080 포트가 이미 사용 중이면 `application.properties`에서 `server.port` 변경
-- 프론트엔드: 3000 포트가 사용 중이면 다른 포트 사용 제안이 표시됨
-
-## 환경 변수 설정 (Environment Variables)
-
-### 데이터베이스 연결 설정 (권장)
-운영 환경에서는 데이터베이스 자격 증명을 환경 변수로 설정하는 것이 좋습니다:
+운영 환경에서는 자격 증명을 환경 변수로 분리하는 것이 좋습니다.
 
 ```bash
 # Linux/Mac
-export DB_URL="jdbc:mysql://localhost:3306/ictdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
-export DB_USERNAME="your_username"
-export DB_PASSWORD="your_password"
+export DB_URL="jdbc:oracle:thin:@//localhost:1521/XEPDB1"
+export DB_USERNAME="ICTDB"
+export DB_PASSWORD="ictdb"
 
 # Windows PowerShell
-$env:DB_URL="jdbc:mysql://localhost:3306/ictdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
-$env:DB_USERNAME="your_username"
-$env:DB_PASSWORD="your_password"
+$env:DB_URL="jdbc:oracle:thin:@//localhost:1521/XEPDB1"
+$env:DB_USERNAME="ICTDB"
+$env:DB_PASSWORD="ictdb"
 ```
-
-환경 변수가 설정되지 않은 경우 기본값(root/root)이 사용됩니다.
-
-**보안 참고**: 절대 데이터베이스 비밀번호를 코드에 직접 작성하지 마세요.
-
-## 프로젝트 구조 설명
-
-```
-ict2/
-├── backend/                          # Spring Boot 백엔드
-│   ├── src/main/java/com/ict/project/
-│   │   ├── ProjectApplication.java   # Spring Boot 메인 클래스
-│   │   ├── config/
-│   │   │   └── WebConfig.java        # CORS 설정
-│   │   ├── controller/
-│   │   │   └── UserController.java   # REST API 컨트롤러
-│   │   ├── model/
-│   │   │   └── User.java             # 사용자 엔티티
-│   │   └── repository/
-│   │       └── UserRepository.java   # JDBC 데이터 접근 계층
-│   ├── src/main/resources/
-│   │   ├── application.properties    # 설정 파일
-│   │   └── schema.sql                # 데이터베이스 스키마
-│   └── pom.xml                       # Maven 의존성 설정
-│
-└── frontend/                         # React 프론트엔드
-    ├── public/
-    │   └── index.html                # HTML 템플릿
-    ├── src/
-    │   ├── components/
-    │   │   ├── UserForm.js           # 사용자 폼 컴포넌트
-    │   │   ├── UserForm.css
-    │   │   ├── UserList.js           # 사용자 목록 컴포넌트
-    │   │   └── UserList.css
-    │   ├── App.js                    # 메인 앱 컴포넌트
-    │   ├── App.css
-    │   ├── index.js                  # React 진입점
-    │   └── index.css
-    └── package.json                  # npm 의존성 설정
-```
-
-## 기술 스택 상세
-
-### Backend
-- **Spring Boot 3.2.1** - 프레임워크
-- **Spring JDBC** - 데이터베이스 연동
-- **MySQL Connector/J** - MySQL 드라이버
-- **Maven** - 빌드 도구
-
-### Frontend
-- **React 18.2.0** - UI 라이브러리
-- **Axios 1.13.4** - HTTP 클라이언트
-- **React Scripts 5.0.1** - 빌드 도구
-
-### Database
-- **MySQL 8.x** - 관계형 데이터베이스
