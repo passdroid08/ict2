@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# IDE (Eclipse/STS)
+.classpath
+.project
+.settings/
+.factorypath
+
+# (선택) 빌드/산출물 zip
+*.zip
+
