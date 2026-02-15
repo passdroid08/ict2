@@ -24,10 +24,12 @@ dist-ssr
 *.sw?
 
 # IDE (Eclipse/STS)
-.classpath
-.project
-.settings/
-.factorypath
+# Eclipse/STS
+backend/.classpath
+backend/.project
+backend/.factorypath
+backend/.settings/
+
 
 # (선택) 빌드/산출물 zip
 *.zip
