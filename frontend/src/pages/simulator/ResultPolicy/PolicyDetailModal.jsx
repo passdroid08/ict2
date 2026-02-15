@@ -1,4 +1,6 @@
 import styles from "../styles";
+import PolicyImpactBlock from "./PolicyImpactBlock";
+import PolicyReasonBlock from "./PolicyReasonBlock";
 
 export default function PolicyDetailModal({ open, policy, onClose }) {
   if (!open || !policy) return null;
@@ -12,49 +14,18 @@ export default function PolicyDetailModal({ open, policy, onClose }) {
           <button onClick={onClose} style={styles.modalCloseBtn}><i className="fa-solid fa-x"></i></button>
         </div>
 
-        {/* 적용 여부 */}
-        <section style={styles.modalSection}>
-          <div style={styles.modalSectionTitle}>적용 가능 여부</div>
-          <div
-            style={{
-              ...styles.badge,
-              background: policy.eligible ? "#E8F5E9" : "#FFEBEE",
-              color: policy.eligible ? "#2E7D32" : "#C62828",
-            }}
-          >
-            {policy.eligible ? "적용 가능" : "적용 불가"}
-          </div>
-          <div style={styles.modalText}>{policy.reason}</div>
-        </section>
+        {/* 어떤 조건 때문에 해당 정책이 선정되었는지에 대한 내용 */}
+        <PolicyReasonBlock
+          reasons={policy?.reasons}
+          summary={policy?.reasonSummary}
+        />
 
         {/* 영향 수치 */}
-        <section style={styles.modalSection}>
-          <div style={styles.modalSectionTitle}>예상 영향</div>
-
-          <div style={styles.impactRow}>
-            <span>구매 가능 금액 변화</span>
-            <strong>
-              {policy.impactAmount >= 0 ? "+" : ""}
-              {policy.impactAmount?.toLocaleString()}원
-            </strong>
-          </div>
-
-          <div style={styles.barWrapper}>
-            <div
-              style={{
-                ...styles.bar,
-                width: `${Math.min(100, Math.max(0, policy.impactPercent ?? 0))}%`,
-              }}
-            />
-          </div>
-
-          {typeof policy.monthlyImpact === "number" && (
-            <div style={{ marginTop: 10, ...styles.modalText }}>
-              월 부담 변화: {policy.monthlyImpact >= 0 ? "+" : ""}
-              {policy.monthlyImpact.toLocaleString()}원
-            </div>
-          )}
-        </section>
+        <PolicyImpactBlock
+          impactAmount={policy.impactAmount}
+          impactPercent={policy.impactPercent}
+          monthlyImpact={policy.monthlyImpact}
+        />
 
         {/* 주요 조건 */}
         <section style={styles.modalSection}>

@@ -32,3 +32,12 @@ yarn-error.log*
 *.bak
 *.swp
 *~
+
+# Eclipse/STS
+backend/.classpath
+backend/.project
+backend/.factorypath
+backend/.settings/
+
+# artifacts
+*.zip

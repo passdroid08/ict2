@@ -1,18 +1,30 @@
 import KpiBox from "../Component/kpiBox";
 import styles from "../styles";
 
-export default function Summary(){
+export default function Summary({ summary }) {
 
     return <>
         <div style={styles.kpiGrid}>
                 <div style={styles.kpiMain}>
-                  <KpiBox label="구매 가능 범위" />
+                  <KpiBox
+                      label="구매 가능 범위"
+                      value={summary?.purchaseRange}
+                    />
                 </div>
 
                 <div style={styles.kpiSubGrid}>
-                  <KpiBox label="자금 안전도" />
-                  <KpiBox label="목표 달성 가능성" />
-                  <KpiBox label="월 상환 부담률" />
+                  <KpiBox
+                    label="자금 안전도"
+                    value={summary?.assetSafety}
+                  />
+                  <KpiBox
+                    label="목표 달성 가능성"
+                    value={summary?.goalFeasibility}
+                  />
+                  <KpiBox
+                    label="월 상환 부담률"
+                    value={summary?.monthlyBurdenRatio}
+                  />
                 </div>
         </div>
     </>

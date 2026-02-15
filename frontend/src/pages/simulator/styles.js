@@ -263,7 +263,7 @@ const styles = {
     borderRadius: 12,
     padding: "10px 12px",
     background: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 8,
   },
 
