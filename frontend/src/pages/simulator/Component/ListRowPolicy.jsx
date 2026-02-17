@@ -1,10 +1,12 @@
 import styles from "../styles";
 
-export default function ListRowPolicy({ left, impact }) {
+export default function ListRowPolicy({ left, impact, selected }) {
   return (
     <div
       style={{
         ...styles.listRow,
+        backgroundColor: selected ? "rgba(41, 121, 255, 0.10)" : "transparent",
+        transition: "background-color 0.2s ease",
         display: "grid",
         gridTemplateColumns: "400px 300px", // 마지막 24px은 아이콘
         alignItems: "center",

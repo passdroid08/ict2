@@ -15,6 +15,7 @@ import Detail from "./pages/bbs/Detail";
 import ErrorPage from "./components/ErrorPage";
 import { authLoader } from "./util/authLoader";
 import Result from "./pages/simulator/Result.jsx";
+import FormProvider from "./provider/FormProvider.jsx";
 
 /*
     <<<createBrowserRouter를 호출로 BrowserRouter생성>>>
@@ -65,7 +66,11 @@ const router = createBrowserRouter([
                     },
                     {
                         path: "result",
-                        element: <Result />, // Bbs 내부에 <Outlet />이 있어야 함
+                        element: (
+                            <FormProvider>
+                            <Result />
+                            </FormProvider>
+                        ), 
                         children: [
                          
                             

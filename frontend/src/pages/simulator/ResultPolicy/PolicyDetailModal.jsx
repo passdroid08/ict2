@@ -2,7 +2,7 @@ import styles from "../styles";
 import PolicyImpactBlock from "./PolicyImpactBlock";
 import PolicyReasonBlock from "./PolicyReasonBlock";
 
-export default function PolicyDetailModal({ open, policy, onClose }) {
+export default function PolicyDetailModal({ open, policy, onClose, onApply, applied }) {
   if (!open || !policy) return null;
 
   return (
@@ -45,7 +45,15 @@ export default function PolicyDetailModal({ open, policy, onClose }) {
 
         {/* Footer */}
         <div style={styles.modalFooter}>
-          <button style={styles.actionBtn}>해당 정책 적용 하기</button>
+          <button 
+          style={{
+            ...styles.actionBtn,
+            backgroundColor: applied ? "#ff0000" : "#2979FF",
+          }}
+          onClick={() => onApply?.(policy.policyId)}          
+          >
+           {applied ? "적용 해제" : "적용하기"}
+          </button>
         </div>
       </div>
     </div>

@@ -1,99 +1,123 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import InputSection from "./InputSection/InputSection";
 import styles from "./styles";
 import Title from "./SimulTitle/Title";
-import PloicyList from "./ResultPolicy/PolicyList";
 import { useNavigate } from "react-router-dom";
 import Summary from "./Summary/Summary";
 import ResultList from "./ResultSave/ResultList";
 import PolicyDetailModal from "./ResultPolicy/PolicyDetailModal";
 import Loading from "../../components/Loading";
 import Failure from "../../components/Failure";
+import PolicyList from "./ResultPolicy/PolicyList";
+import { RESULT_REQUEST_ACTION } from "../../config/constants";
+import resultRequestReducer, {
+  initialResultRequestState,
+} from "../../reducer/resultRequestReducer";
+import useFormContext from "../../context/useFormContext";
+import {
+  requestInitialSimulation,
+  requestRecalculation,
+  getRequestErrorMessage,
+} from "./RequestAndFetch";
 
 export default function Result() {
   const navigate = useNavigate();
-
   const [open, setOpen] = useState(false);
-  const [policyOpen, setPolicyOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
 
-  // ✅ 정책 목록 상태
-  const [policies, setPolicies] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [requestState, requestDispatch] = useReducer(
+    resultRequestReducer,
+    initialResultRequestState
+  );
 
-  //시뮬 계산 결과
-  const [simulRes, setSimulRes] = useState(null);
-  const [simulLoading, setSimulLoading] = useState(false);
+  const { formState } = useFormContext();
+  const f = formState.fields;
+  const debounceRef = useRef(null);
 
-  const toggle = () => setOpen((prev) => !prev);
-  
+
+  const [selectedPolicyIds, setSelectedPolicyIds] = useState([]);
+
+  const handleApplyPolicy = (policyId) => {
+    const next = selectedPolicyIds.includes(policyId)
+      ? selectedPolicyIds.filter((id) => id !== policyId) // ✅ 해제
+      : [...selectedPolicyIds, policyId];                  // ✅ 적용
+
+    setSelectedPolicyIds(next);
+    clearTimeout(debounceRef.current);    
+    recalculate(next);
+    setSelectedPolicy(null);
+  };
+
+
+
+
+  const recalculate = async (nextPolicyIds = []) => {
+    requestDispatch({ type: RESULT_REQUEST_ACTION.RECALC_START });
+    try {
+      const res = await requestRecalculation(f, nextPolicyIds);
+      requestDispatch({
+        type: RESULT_REQUEST_ACTION.RECALC_SUCCESS,
+        payload: res.data,
+      });
+      setSelectedPolicyIds(res.data.appliedPolicyIds || []);
+    } catch (err) {
+      requestDispatch({
+        type: RESULT_REQUEST_ACTION.RECALC_ERROR,
+        payload: getRequestErrorMessage(err, "재계산에 실패했습니다."),
+      });
+    }
+  };
+
   useEffect(() => {
     let alive = true;
 
-    const fetchResultData  = async () => {
+    const init = async () => {
+      requestDispatch({ type: RESULT_REQUEST_ACTION.FETCH_START });
       try {
-        setLoading(true);
-        setErrorMessage("");
-
-      
-       
-
-        // 시뮬 POST
-        const simulRes = await axios.post(
-          "http://localhost:8080/api/simulator/calculate",
-          {
-            cashAvailable: 30000000,
-            monthlyHousingBudget: 1200000,
-            emergencyFund: 5000000,
-            loanPreference: "CONSERVATIVE",
-            targetMonths: 6,
-            targetPropertyPrice: 450000000,
-            selectedPolicyIds: [1, 2, 3],
-            requestedAt: new Date().toISOString(),
-          },
-          { timeout: 3000 }
-        );
-
+        const res = await requestInitialSimulation(f);
         if (!alive) return;
-
-        setSimulRes(simulRes.data);
-        console.log("simulate response:", simulRes.data);
-
-
+        requestDispatch({
+          type: RESULT_REQUEST_ACTION.FETCH_SUCCESS,
+          payload: res.data,
+        });
+        setSelectedPolicyIds(res.data.appliedPolicyIds || []);
       } catch (err) {
         if (!alive) return;
-
-        const isNetworkDown =
-          err?.code === "ERR_NETWORK" ||
-          err?.code === "ECONNABORTED" ||
-          !err?.response;
-
-        if (isNetworkDown) return;
-
-        setErrorMessage(
-          err?.response?.data?.message ||
-          err?.message ||
-          "데이터를 불러오지 못했습니다."
-        );
-      } finally {
-        if (!alive) return;
-        setLoading(false);
+        requestDispatch({
+          type: RESULT_REQUEST_ACTION.FETCH_ERROR,
+          payload: getRequestErrorMessage(err),
+        });
       }
     };
 
-    fetchResultData();
-
+    init();
     return () => {
       alive = false;
     };
   }, []);
 
-  // ✅ 로딩/에러 처리 (더미 필요 없음)
-  if (loading || simulLoading) return <Loading />;
-  if (errorMessage) return <Failure message={errorMessage} />;
+  useEffect(() => {
+    if (!requestState.data) return; // 초기 fetch 전에는 스킵
+    clearTimeout(debounceRef.current);
+
+      debounceRef.current = setTimeout(() => {
+          recalculate(selectedPolicyIds);
+        }, 300);
+  }, [
+      f.cash,
+      f.monthlyLimit,
+      f.emergencyFund,
+      f.loanPreference,
+      f.targetMonths,
+      f.targetPrice,
+  ]);
+
+
+  if (requestState.loading) return <Loading />;
+  if (requestState.error && !requestState.data) {
+    return <Failure message={requestState.error} />;
+  }
 
 
   return (
@@ -106,22 +130,19 @@ export default function Result() {
             <div style={{ ...styles.card }}>
               <div style={styles.resultBody}>
                 <div style={styles.subMaintitle}>Summary</div>
-                    <Summary summary={simulRes?.summary} />
+                <Summary summary={requestState.data?.summary} />
                 <div style={styles.explain}>
-                  설명 영역: 결과 근거 및 전략 제안 부분
-                </div>       
+                  설명 영역: 결과 근거 및 정책 제안 부분
+                </div>
 
                 <div style={styles.sectionDivider} />
 
                 <div>
                   <div style={styles.subMaintitle}>PolicyList</div>
-
-                  <PloicyList
-                    policies={simulRes?.policyList || []}
-                    onSelectPolicy={(p) => {
-                      setSelectedPolicy(p);
-                      setPolicyOpen(true);
-                    }}
+                  <PolicyList
+                      policies={requestState.data?.policyList || []}
+                      selectedPolicyIds={selectedPolicyIds}   
+                      onSelectPolicy={(p) => setSelectedPolicy(p)}
                   />
                 </div>
 
@@ -144,7 +165,7 @@ export default function Result() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                toggle();
+                setOpen((prev) => !prev);
               }}
               style={{
                 ...styles.fab,
@@ -173,9 +194,15 @@ export default function Result() {
       </div>
 
       <PolicyDetailModal
-        open={policyOpen}
+        open={Boolean(selectedPolicy)}
         policy={selectedPolicy}
-        onClose={() => setPolicyOpen(false)}
+        onClose={() => setSelectedPolicy(null)}
+        applied={
+          selectedPolicy
+            ? selectedPolicyIds.includes(selectedPolicy.policyId)
+            : false
+        }
+        onApply={(policyId) => handleApplyPolicy(policyId)}
       />
     </>
   );

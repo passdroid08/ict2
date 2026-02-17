@@ -1,49 +1,18 @@
 import { useMemo, useState } from "react";
 import SliderBlock from "./SliderBlock";
 import styles from "../styles";
+import { SIMULATOR_GROUPS } from "../../../config/constants";
 
 export default function InputSection({ onClose }) {
-  // (2) 화면에 표시할 버튼 목록(초기값 배열)
-  const [visibleGroupKeys] = useState([
-    "ALL",
-    "CASH",
-    "MONTHLY",
-    "EMG",
-    "LOAN",
-    "TIME",
-    "PRICE",
-  ]);
-
   // (1) 현재 선택된 그룹들(토글되는 배열) - "ALL"은 여기 넣지 않습니다.
   const [selectedGroups, setSelectedGroups] = useState([]); // 처음엔 아무것도 없음
 
-  const groups = useMemo(
-    () => [
-      { key: "ALL", label: "전체" },
-      { key: "CASH", label: "현금" },
-      { key: "MONTHLY", label: "월 한도" },
-      { key: "EMG", label: "비상금" },
-      { key: "LOAN", label: "대출 성향" },
-      { key: "TIME", label: "목표 시점" },
-      { key: "PRICE", label: "목표 매물" },
-    ],
-    []
-  );
-
   // blocks는 그대로
-  const blocks = [
-    { group: "CASH", title: "가용 현금", right: "원" },
-    { group: "MONTHLY", title: "월 한도", right: "원" },
-    { group: "EMG", title: "비상금", right: "원" },
-    { group: "LOAN", title: "대출 성향", right: "보수" },
-    { group: "TIME", title: "목표 시점", right: "개월" },
-    { group: "PRICE", title: "목표 매물", right: "0 ~ 5억" },
-  ];
-
+  
   // ✅ ALL 제외한 실제 그룹 키들
   const ALL_KEYS = useMemo(
-    () => groups.map((g) => g.key).filter((k) => k !== "ALL"),
-    [groups]
+    () => SIMULATOR_GROUPS.map((g) => g.key).filter((k) => k !== "ALL"),
+    [SIMULATOR_GROUPS]
   );
 
   // ✅ "전체 상태"인지 판단
@@ -70,6 +39,10 @@ export default function InputSection({ onClose }) {
     });
   }
 
+  
+
+
+
   return (
     <section style={styles.card}>
       <button
@@ -89,9 +62,7 @@ export default function InputSection({ onClose }) {
       <div style={styles.panelBody}>
         {/* button 위치 영역 */}
         <div style={styles.buttonGrid}>
-          {groups
-            .filter((g) => visibleGroupKeys.includes(g.key))
-            .map((g) => {
+          {SIMULATOR_GROUPS.map((g) => {
               const active = isActive(g.key);
 
               return (
@@ -113,7 +84,7 @@ export default function InputSection({ onClose }) {
 
         <div style={styles.sectionDivider} />
 
-        <SliderBlock selectedGroups={selectedGroups} blocks={blocks} />
+        <SliderBlock selectedGroups={selectedGroups}/>
       </div>
     </section>
   );
