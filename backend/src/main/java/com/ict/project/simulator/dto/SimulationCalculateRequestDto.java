@@ -16,13 +16,13 @@ public class SimulationCalculateRequestDto {
 
     private Long userId;
 
-    private Integer cashAvailable;
-    private Integer emergencyFund;
-    private Integer monthlyHousingBudget;
+    private Long cashAvailable;
+    private Long emergencyFund;
+    private Long monthlyHousingBudget;
 
     private String loanPreference;
     private Integer targetMonths;
-    private Integer targetPropertyPrice;
+    private Long targetPropertyPrice;
 
     // 사용자가 최종 선택한 정책들
     private List<Long> selectedPolicyIds;

@@ -13,9 +13,12 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class SimulationCalculateResponseDto {
-
+    
     private SummaryDto summary;
+
     private List<PolicyImpactDto> policyList;
+    private List<Long> appliedPolicyIds;
+    
     private String explanation;
 
     private LocalDateTime calculatedAt; // 계산 완료 시각

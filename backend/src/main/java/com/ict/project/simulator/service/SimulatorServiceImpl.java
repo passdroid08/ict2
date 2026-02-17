@@ -22,30 +22,33 @@ public class SimulatorServiceImpl implements SimulatorService {
 
         long totalLoanDelta = 0L;
         long totalMonthlyDelta = 0L;
+        List<Long> allPolicyIds = List.of(1L, 2L, 3L, 4L, 5L);
 
-        for (Long id : selectedIds) {
+        for (Long id : allPolicyIds) {
             PolicyImpactDto impact = makeDummyImpact(id);
             if (impact != null) {
                 impacts.add(impact);
+                if (selectedIds.contains(id)) {
                 totalLoanDelta += impact.getImpactAmount();
                 totalMonthlyDelta += impact.getMonthlyImpact();
+                }
             }
         }
 
         // 2) 더미 요약 계산(나중에 계산 엔진으로 교체)
-        long cash = safeInt(request.getCashAvailable());
-        long emg = safeInt(request.getEmergencyFund());
+        long cash = safeLong(request.getCashAvailable());
+        long emg = safeLong(request.getEmergencyFund());
         long baseCash = cash + emg;
 
         // 목표 매물 가격(있으면 반영)
-        long targetPrice = safeInt(request.getTargetPropertyPrice());
+        long targetPrice = safeLong(request.getTargetPropertyPrice());
 
         // 매수 가능 범위(더미): (현금+정책대출) ~ (현금+정책대출+5천만)
         long minPrice = Math.max(0, baseCash + totalLoanDelta);
         long maxPrice = Math.max(minPrice, baseCash + totalLoanDelta + 50_000_000L);
 
         // 월 부담 비율(더미): (예상 월상환 / 월 주거비 한도)
-        long budget = safeInt(request.getMonthlyHousingBudget());
+        long budget = safeLong(request.getMonthlyHousingBudget());
         long estimatedMonthlyPayment = Math.max(0, 600_000L + totalMonthlyDelta); // 기준 60만 + 정책 영향
         String monthlyRatio = (budget <= 0)
                 ? "미입력"
@@ -64,17 +67,24 @@ public class SimulatorServiceImpl implements SimulatorService {
                 .monthlyBurdenRatio(monthlyRatio)
                 .build();
 
-        String explanation = buildExplanation(request, impacts.size(), totalLoanDelta, totalMonthlyDelta, estimatedMonthlyPayment);
+        String explanation = buildExplanation(request, selectedIds.size(), totalLoanDelta, totalMonthlyDelta, estimatedMonthlyPayment);
 
         return SimulationCalculateResponseDto.builder()
                 .summary(summary)
                 .policyList(impacts)
                 .explanation(explanation)
-                .calculatedAt(LocalDateTime.now()) // ✅ 점(.) 포함해서 컴파일 되게 수정
+                .calculatedAt(LocalDateTime.now())
+                .appliedPolicyIds(selectedIds)// ✅ 점(.) 포함해서 컴파일 되게 수정
                 .build();
     }
 
-    private PolicyImpactDto makeDummyImpact(Long policyId) {
+    
+
+	private long safeLong(Long v) {
+		 return v == null ? 0L : v;
+	}
+
+	private PolicyImpactDto makeDummyImpact(Long policyId) {
         if (policyId == null) return null;
 
         // TODO: 정책 테이블/룰 엔진으로 교체
@@ -144,13 +154,7 @@ public class SimulatorServiceImpl implements SimulatorService {
         };
     }
 
-    private int safeInt(Integer v) {
-        return v == null ? 0 : v;
-    }
-
-    private long safeLong(Long v) {
-        return v == null ? 0L : v;
-    }
+    
 
     private String formatWonRange(long min, long max) {
         return String.format("%,d원 ~ %,d원", min, max);
@@ -181,6 +185,7 @@ public class SimulatorServiceImpl implements SimulatorService {
             long estimatedMonthlyPayment
     ) {
         String loanPref = request.getLoanPreference() == null ? "미입력" : request.getLoanPreference();
+        
         int months = request.getTargetMonths() == null ? 0 : request.getTargetMonths();
 
         return String.format(
