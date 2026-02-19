@@ -42,6 +42,17 @@ public class Property {
 
     @Column(name = "REGULATION_TYPE_MAP", length = 50)
     private String regulationTypeMap;
+    
+	// latestPrice: 최신 실거래/기준 가격(없을 수 있음)
+	// avgPrice1y: 1년 평균/집계 가격(없을 수 있음)
+	//
+	// [POLICY] 기준가격(referencePrice)은 컬럼 추가 없이 서비스 로직에서 우선순위로 결정:
+	//           referencePrice = latestPrice ?? avgPrice1y ?? null
+	//
+	// [POLICY] 가격 정보가 없는 매물(referencePrice == null)도
+	//           선호점수(preferenceScore)가 임계치 이상이면 추천 후보에 포함할 수 있다.
+	//           단, priceKnown=false로 라벨링하고 최종 점수에는 패널티를 적용한다.
+	//           (MVP에서는 우선 제외하거나, 임계치/패널티 값은 추후 팀 합의로 확정)
 
     @Column(name = "LATEST_PRICE", precision = 15, scale = 0)
     private BigDecimal latestPrice;

@@ -36,8 +36,14 @@ public class FinanceSnapshot {
     @Column(name = "SCENARIO_NAME", length = 100)
     private String scenarioName;
 
-    @Column(name = "SNAPSHOT_AT")
+    @Column(name = "SNAPSHOT_AT", nullable = false)
     private LocalDateTime snapshotAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (snapshotAt == null) snapshotAt = LocalDateTime.now();
+    }
+
 
     @Column(name = "CASH_ASSET", precision = 15, scale = 0)
     private BigDecimal cashAsset;

@@ -70,7 +70,7 @@ public class SimulatorServiceImpl implements SimulatorService {
         String explanation = buildExplanation(request, selectedIds.size(), totalLoanDelta, totalMonthlyDelta, estimatedMonthlyPayment);
 
         return SimulationCalculateResponseDto.builder()
-                .summary(summary)
+                .summaryDto(summary)
                 .policyList(impacts)
                 .explanation(explanation)
                 .calculatedAt(LocalDateTime.now())

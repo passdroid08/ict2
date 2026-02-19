@@ -6,7 +6,15 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "SOCIAL_CONNECTION")
+@Table(
+    name = "SOCIAL_CONNECTION",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "UK_SC_PROVIDER_UID",
+            columnNames = {"PROVIDER", "PROVIDER_UID"}
+        )
+    }
+)
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder

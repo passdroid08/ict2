@@ -34,8 +34,13 @@ public class AiRecommendation {
     @Column(name = "SCORE", precision = 5, scale = 4)
     private BigDecimal score;
 
-    @Column(name = "RECOMMENDED_AT")
+    @Column(name = "RECOMMENDED_AT", nullable = false)
     private LocalDateTime recommendedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (recommendedAt == null) recommendedAt = LocalDateTime.now();
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "INFER_ID")

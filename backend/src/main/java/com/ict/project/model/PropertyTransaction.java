@@ -12,6 +12,12 @@ import java.time.LocalDateTime;
 @NoArgsConstructor @AllArgsConstructor
 @Builder
 public class PropertyTransaction {
+	/*
+	 * [TECH DEBT]
+	 * - Y/N 또는 0/1 플래그 컬럼은 현재 단순 타입으로 유지.
+	 * - 추후 Boolean + AttributeConverter 적용하여 타입 안정성 강화 예정.
+	 * - DB CHECK 제약도 함께 고려.
+	 */
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "SEQ_PROPERTY_TRANSACTION_GEN")
@@ -23,15 +29,16 @@ public class PropertyTransaction {
     @JoinColumn(name = "PROPERTY_ID", nullable = false)
     private Property property;
 
-    @Column(name = "TRADE_TYPE", length = 20)
-    private String tradeType;
+    @Column(name = "TRADE_TYPE", nullable = false, length = 20)
+    private String tradeType; // 또는 Enum으로 (SALE, JEONSE, WOLSE)
 
     @Column(name = "PRICE", precision = 15, scale = 0)
     private BigDecimal price;
 
-    @Column(name = "CONTRACT_DATE")
+    @Column(name = "CONTRACT_DATE", nullable = false)
     private LocalDateTime contractDate;
-
+    
+    
     @Column(name = "CANCELED", length = 1)
     private String canceled;
 

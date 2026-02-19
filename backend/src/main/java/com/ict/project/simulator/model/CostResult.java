@@ -37,6 +37,12 @@ public class CostResult {
     @Column(name = "TOTAL_COST", precision = 15, scale = 0)
     private BigDecimal totalCost;
 
-    @Column(name = "CALCULATED_AT")
+    @Column(name = "CALCULATED_AT", nullable = false)
     private LocalDateTime calculatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        if (calculatedAt == null) calculatedAt = LocalDateTime.now();
+    }
+
 }

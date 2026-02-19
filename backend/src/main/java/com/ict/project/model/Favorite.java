@@ -6,7 +6,15 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "FAVORITE")
+@Table(
+    name = "FAVORITE",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "UK_FAVORITE_USER_PROPERTY",
+            columnNames = {"USER_ID", "PROPERTY_ID"}
+        )
+    }
+)
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder

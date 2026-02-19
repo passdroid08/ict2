@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class SummaryDto {
 
-    private String purchaseRange;       // "2.8억 ~ 3.4억"
+	private String purchaseRange;       // "2.8억 ~ 3.4억"
     private String assetSafety;         // "낮음/보통/높음"
     private String goalFeasibility;     // "낮음/보통/높음"
     private String monthlyBurdenRatio;  // "28%"

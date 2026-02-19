@@ -6,7 +6,15 @@ import lombok.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "USER_PREFERENCE")
+@Table(
+    name = "USER_PREFERENCE",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "UK_UP_USER_PREFKEY",
+            columnNames = {"USER_ID", "PREF_KEY"}
+        )
+    }
+)
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder

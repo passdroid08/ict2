@@ -41,3 +41,13 @@ backend/.settings/
 
 # artifacts
 *.zip
+
+# IDE / editor
+.vscode/
+.metadata/
+
+# build output
+bin/
+
+# Node lockfile at repo root (if not used)
+package-lock.json

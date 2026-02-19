@@ -14,7 +14,7 @@ import java.util.List;
 @Builder
 public class SimulationCalculateResponseDto {
     
-    private SummaryDto summary;
+	private SummaryDto summaryDto;
 
     private List<PolicyImpactDto> policyList;
     private List<Long> appliedPolicyIds;
