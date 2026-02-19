@@ -25,7 +25,8 @@ export default function Result() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
-
+  const [selectedPolicyIds, setSelectedPolicyIds] = useState([]);
+  
   const [requestState, requestDispatch] = useReducer(
     resultRequestReducer,
     initialResultRequestState
@@ -34,9 +35,6 @@ export default function Result() {
   const { formState } = useFormContext();
   const f = formState.fields;
   const debounceRef = useRef(null);
-
-
-  const [selectedPolicyIds, setSelectedPolicyIds] = useState([]);
 
   const handleApplyPolicy = (policyId) => {
     const next = selectedPolicyIds.includes(policyId)
@@ -49,9 +47,6 @@ export default function Result() {
     setSelectedPolicy(null);
   };
 
-
-
-
   const recalculate = async (nextPolicyIds = []) => {
     requestDispatch({ type: RESULT_REQUEST_ACTION.RECALC_START });
     try {
@@ -60,7 +55,7 @@ export default function Result() {
         type: RESULT_REQUEST_ACTION.RECALC_SUCCESS,
         payload: res.data,
       });
-      setSelectedPolicyIds(res.data.appliedPolicyIds || []);
+      console.log("simulation response body(ReCal)", res.data);
     } catch (err) {
       requestDispatch({
         type: RESULT_REQUEST_ACTION.RECALC_ERROR,
@@ -81,7 +76,7 @@ export default function Result() {
           type: RESULT_REQUEST_ACTION.FETCH_SUCCESS,
           payload: res.data,
         });
-        setSelectedPolicyIds(res.data.appliedPolicyIds || []);
+        console.log("simulation response body(FirstCal)", res.data);
       } catch (err) {
         if (!alive) return;
         requestDispatch({

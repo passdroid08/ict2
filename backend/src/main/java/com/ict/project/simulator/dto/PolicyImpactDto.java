@@ -6,8 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -16,9 +18,9 @@ public class PolicyImpactDto {
 	private Long policyId;
 	private String name;
 
-	private Long impactAmount;     // 기존 loanDelta 대체 가능
-	private Double impactPercent;  // 계산 필요
-	private Long monthlyImpact;    // 기존 monthlyDelta
+	private Long impactAmount;    
+	private Double impactPercent;  
+	private Long monthlyImpact;    
 
 	private List<String> reasons;
 	private String reasonSummary;

@@ -1,4 +1,4 @@
-import KpiBox from "../Component/kpiBox";
+import KpiBox from "../Component/KpiBox";
 import styles from "../styles";
 
 export default function Summary({ summary }) {
@@ -10,7 +10,7 @@ export default function Summary({ summary }) {
                       label="구매 가능 범위"
                       value={summary?.purchaseRange}
                     />
-                </div>
+                </div>          
 
                 <div style={styles.kpiSubGrid}>
                   <KpiBox

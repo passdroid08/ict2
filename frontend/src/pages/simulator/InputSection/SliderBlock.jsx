@@ -1,5 +1,5 @@
 import { SIMULATOR_BLOCKS } from "../../../config/constants";
-import EmptyState from "./EmtyState";
+import EmptyState from "./EmptyState";
 import FieldBlock from "./FieldBlock";
 
 export default function SliderBlock({ selectedGroups }) {
