@@ -45,7 +45,7 @@ export const SIMULATOR_GROUPS = [
   { key: "EMG", label: "비상금" },
   { key: "LOAN", label: "대출 성향" },
   { key: "TIME", label: "목표 시점" },
-  { key: "PRICE", label: "목표 매매" },
+  { key: "PRICE", label: "목표 매물" },
 ];
 
 //입력 패널 버튼 클릭시 생성 블락 상수
