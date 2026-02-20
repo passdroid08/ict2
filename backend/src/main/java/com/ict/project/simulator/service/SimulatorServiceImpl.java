@@ -1,201 +1,161 @@
 package com.ict.project.simulator.service;
 
-import com.ict.project.simulator.dto.PolicyImpactDto;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.ict.project.policy.entity.PolicyEntity;
+import com.ict.project.policy.repository.PolicyRepository;
+import com.ict.project.simulator.calc.FinanceCalculator;
+import com.ict.project.simulator.calc.FinanceScorer;
+import com.ict.project.simulator.calc.InputMergeService;
+import com.ict.project.simulator.calc.PolicyImpactCalculator;
+import com.ict.project.simulator.calc.FinanceCalculator.FinanceResult;
+import com.ict.project.simulator.calc.FinanceScorer.ScoreInput;
+import com.ict.project.simulator.calc.FinanceScorer.ScoreResult;
+import com.ict.project.simulator.calc.InputMergeService.MergedInput;
+import com.ict.project.simulator.calc.PolicyImpactCalculator.PolicyImpactResult;
 import com.ict.project.simulator.dto.SimulationCalculateRequestDto;
 import com.ict.project.simulator.dto.SimulationCalculateResponseDto;
 import com.ict.project.simulator.dto.SummaryDto;
-import org.springframework.stereotype.Service;
+import com.ict.project.simulator.profile.ProfileService;
+import com.ict.project.simulator.profile.ProfileService.ProfileSnapshot;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import lombok.RequiredArgsConstructor;
 
 @Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class SimulatorServiceImpl implements SimulatorService {
+
+    private final ProfileService profileService;
+    private final PolicyRepository policyRepository;
+
+    private final PolicyImpactCalculator policyImpactCalculator;
+    private final InputMergeService inputMergeService;
+    private final FinanceCalculator financeCalculator;
+    private final FinanceScorer financeScorer;
+    
+    /**
+     * loanPreference 정규화 규칙
+     *
+     * - 외부 입력은 유연하게 받되(문자열), 내부 계산/추천 로직은 표준 코드로만 처리한다.
+     * - null/blank/unknown 값은 기본값("NONE")으로 치환한다.
+     * - 향후 코드 체계가 바뀌어도 이 메소드만 수정하면 되도록 중앙집중화한다.
+     */
+    private String normalizeLoanPreference(String raw) {
+        if (raw == null) return "NONE";
+        String v = raw.trim();
+        if (v.isEmpty()) return "NONE";
+
+        String u = v.toUpperCase();
+        if (u.equals("NONE") || v.equals("없음")) return "NONE";
+        if (u.equals("CONSERVATIVE") || v.equals("보수")) return "CONSERVATIVE";
+        if (u.equals("MAX") || v.equals("최대")) return "MAX";
+
+        // 알 수 없는 값은 안전한 기본값으로 처리(필요 시 로깅 포인트)
+        return "NONE";
+    }
 
     @Override
     public SimulationCalculateResponseDto calculate(SimulationCalculateRequestDto request) {
+        SimulationCalculateRequestDto req = (request == null)
+                ? SimulationCalculateRequestDto.builder().build()
+                : request;
+        
+        // 이후 merged/계산 로직에는 normalizedLoanPreference를 사용(또는 req를 복사해 반영)
+        String normalizedLoanPreference = normalizeLoanPreference(req.getLoanPreference());
 
-        // 1) 선택된 정책 영향치(더미)
-        List<Long> selectedIds = request.getSelectedPolicyIds() == null ? List.of() : request.getSelectedPolicyIds();
-        List<PolicyImpactDto> impacts = new ArrayList<>();
-
-        long totalLoanDelta = 0L;
-        long totalMonthlyDelta = 0L;
-        List<Long> allPolicyIds = List.of(1L, 2L, 3L, 4L, 5L);
-
-        for (Long id : allPolicyIds) {
-            PolicyImpactDto impact = makeDummyImpact(id);
-            if (impact != null) {
-                impacts.add(impact);
-                if (selectedIds.contains(id)) {
-                totalLoanDelta += impact.getImpactAmount();
-                totalMonthlyDelta += impact.getMonthlyImpact();
-                }
+        // 1) 프로필 스냅샷(없거나 실패해도 계산은 진행)
+        ProfileSnapshot profile = null;
+        Long userId = req.getUserId();
+        if (userId != null) {
+            try {
+                profile = profileService.loadProfileSnapshot(userId);
+            } catch (Exception ignored) {
+                profile = null;
             }
         }
 
-        // 2) 더미 요약 계산(나중에 계산 엔진으로 교체)
-        long cash = safeLong(request.getCashAvailable());
-        long emg = safeLong(request.getEmergencyFund());
-        long baseCash = cash + emg;
+        // 2) 정책 목록 로드 + 적용/필터/합산(현재는 합산값 0, DTO만 구성)
+        List<PolicyEntity> allPolicies = policyRepository.findAll();
+        PolicyImpactResult policyResult = policyImpactCalculator.evaluate(allPolicies, req.getSelectedPolicyIds());
 
-        // 목표 매물 가격(있으면 반영)
-        long targetPrice = safeLong(request.getTargetPropertyPrice());
+        // 3) 입력 병합(요청DTO + 프로필 + 정책 합산치)
+        MergedInput merged = inputMergeService.merge(
+                profile,
+                req,
+                policyResult.getTotalLoanDelta(),
+                policyResult.getTotalMonthlyDelta()
+        );
 
-        // 매수 가능 범위(더미): (현금+정책대출) ~ (현금+정책대출+5천만)
-        long minPrice = Math.max(0, baseCash + totalLoanDelta);
-        long maxPrice = Math.max(minPrice, baseCash + totalLoanDelta + 50_000_000L);
+        // 4) 재무 계산(Real)
+        FinanceResult finance = financeCalculator.calculate(merged.getFinanceInput());
 
-        // 월 부담 비율(더미): (예상 월상환 / 월 주거비 한도)
-        long budget = safeLong(request.getMonthlyHousingBudget());
-        long estimatedMonthlyPayment = Math.max(0, 600_000L + totalMonthlyDelta); // 기준 60만 + 정책 영향
-        String monthlyRatio = (budget <= 0)
-                ? "미입력"
-                : String.format("%d%%", Math.min(999, Math.round(estimatedMonthlyPayment * 100.0 / budget)));
+        // 5) 점수/레벨 계산(요약에 쓰고 싶을 때 확장 가능)
+        ScoreResult score = financeScorer.score(
+                finance,
+                ScoreInput.builder().targetPropertyPrice(req.getTargetPropertyPrice()).build()
+        );
 
-        // 자산 안전도(더미): 비상금 비중으로 판단
-        String assetSafety = calcAssetSafety(cash, emg);
-
-        // 목표 달성 가능성(더미): 목표 가격이 maxPrice 내인지 여부로 판단
-        String goalFeasibility = calcGoalFeasibility(targetPrice, maxPrice);
-
+        // 6) SummaryDto 조립(프론트가 쓰는 필드만)
         SummaryDto summary = SummaryDto.builder()
-                .purchaseRange(formatWonRange(minPrice, maxPrice))
-                .assetSafety(assetSafety)
-                .goalFeasibility(goalFeasibility)
-                .monthlyBurdenRatio(monthlyRatio)
+                .purchaseRange(formatWonRange(finance.getPurchaseRangeLow(), finance.getPurchaseRangeHigh()))
+                .assetSafety(finance.getAssetSafety())
+                .goalFeasibility(finance.getGoalFeasibility())
+                .monthlyBurdenRatio(finance.getMonthlyBurdenRatio())
                 .build();
 
-        String explanation = buildExplanation(request, selectedIds.size(), totalLoanDelta, totalMonthlyDelta, estimatedMonthlyPayment);
+        // 7) 설명문(일단 서비스에서 조립, 추후 템플릿/AI로 교체 가능)
+        String explanation = buildExplanation(req, policyResult, finance, score);
 
         return SimulationCalculateResponseDto.builder()
                 .summaryDto(summary)
-                .policyList(impacts)
+                .policyList(policyResult.getPolicyList())
+                .appliedPolicyIds(policyResult.getAppliedPolicyIds())
                 .explanation(explanation)
                 .calculatedAt(LocalDateTime.now())
-                .appliedPolicyIds(selectedIds)// ✅ 점(.) 포함해서 컴파일 되게 수정
                 .build();
     }
 
-    
-
-	private long safeLong(Long v) {
-		 return v == null ? 0L : v;
-	}
-
-	private PolicyImpactDto makeDummyImpact(Long policyId) {
-        if (policyId == null) return null;
-
-        // TODO: 정책 테이블/룰 엔진으로 교체
-        return switch (policyId.intValue()) {
-
-        case 1 -> PolicyImpactDto.builder()
-                .policyId(1L)
-                .name("청년 우대 대출")
-                .impactAmount(18_000_000L)
-                .impactPercent(12.5)
-                .monthlyImpact(-85_000L)
-                .reasons(List.of("청년 조건 충족", "소득 기준 충족"))
-                .reasonSummary("연령 및 소득 조건이 정책 기준에 부합합니다.")
-                .conditions(List.of("만 39세 이하", "연 소득 7천만원 이하", "무주택자"))
-                .caution("정책 조건은 매년 변경될 수 있습니다.")
-                .build();
-
-        case 2 -> PolicyImpactDto.builder()
-                .policyId(2L)
-                .name("생애최초 구입 혜택")
-                .impactAmount(12_000_000L)
-                .impactPercent(8.0)
-                .monthlyImpact(-40_000L)
-                .reasons(List.of("생애 최초 주택 구입"))
-                .reasonSummary("이전에 주택을 소유한 이력이 없습니다.")
-                .conditions(List.of("무주택 이력 확인", "LTV 기준 충족"))
-                .caution("기존 주택 보유 이력이 있을 경우 제외됩니다.")
-                .build();
-
-        case 3 -> PolicyImpactDto.builder()
-                .policyId(3L)
-                .name("특례 보금자리론")
-                .impactAmount(8_000_000L)
-                .impactPercent(5.5)
-                .monthlyImpact(-25_000L)
-                .reasons(List.of("고정금리 선호 선택"))
-                .reasonSummary("금리 안정성을 우선시하는 대출 성향입니다.")
-                .conditions(List.of("고정금리 선택", "소득 요건 충족"))
-                .caution("중도상환 수수료가 발생할 수 있습니다.")
-                .build();
-
-        case 4 -> PolicyImpactDto.builder()
-                .policyId(4L)
-                .name("신혼부부 주거 지원")
-                .impactAmount(10_000_000L)
-                .impactPercent(7.2)
-                .monthlyImpact(-30_000L)
-                .reasons(List.of("혼인 기간 7년 이내"))
-                .reasonSummary("신혼부부 대상 우대 조건에 해당합니다.")
-                .conditions(List.of("혼인 증빙 필요", "소득 기준 충족"))
-                .caution("소득 초과 시 일부 혜택 제외될 수 있습니다.")
-                .build();
-
-        case 5 -> PolicyImpactDto.builder()
-                .policyId(5L)
-                .name("지역 규제 완화 혜택")
-                .impactAmount(5_000_000L)
-                .impactPercent(3.5)
-                .monthlyImpact(-10_000L)
-                .reasons(List.of("규제 지역 완화 적용"))
-                .reasonSummary("해당 지역이 규제 완화 구간에 포함됩니다.")
-                .conditions(List.of("해당 지역 매물", "일정 가격 이하"))
-                .caution("지역 정책은 수시로 변경될 수 있습니다.")
-                .build();
-
-        default -> null;
-        };
-    }
-
-    
-
-    private String formatWonRange(long min, long max) {
-        return String.format("%,d원 ~ %,d원", min, max);
-    }
-
-    private String calcAssetSafety(long cash, long emg) {
-        long total = cash + emg;
-        if (total <= 0) return "보통";
-
-        double emgRatio = (double) emg / total; // 비상금 비중
-        if (emgRatio >= 0.35) return "높음";
-        if (emgRatio >= 0.20) return "보통";
-        return "낮음";
-    }
-
-    private String calcGoalFeasibility(long targetPrice, long maxPrice) {
-        if (targetPrice <= 0) return "보통";
-        if (targetPrice <= maxPrice) return "높음";
-        if (targetPrice <= maxPrice + 50_000_000L) return "보통";
-        return "낮음";
+    private String formatWonRange(long low, long high) {
+        long l = Math.max(0L, low);
+        long h = Math.max(l, high);
+        return String.format("%,d원 ~ %,d원", l, h);
     }
 
     private String buildExplanation(
-            SimulationCalculateRequestDto request,
-            int selectedCount,
-            long totalLoanDelta,
-            long totalMonthlyDelta,
-            long estimatedMonthlyPayment
+            SimulationCalculateRequestDto req,
+            PolicyImpactResult policyResult,
+            FinanceResult finance,
+            ScoreResult score
     ) {
-        String loanPref = request.getLoanPreference() == null ? "미입력" : request.getLoanPreference();
-        
-        int months = request.getTargetMonths() == null ? 0 : request.getTargetMonths();
+        int selectedCount = (policyResult.getAppliedPolicyIds() == null) ? 0 : policyResult.getAppliedPolicyIds().size();
+        long loanDelta = policyResult.getTotalLoanDelta();
+        long monthlyDelta = policyResult.getTotalMonthlyDelta();
+
+        String pref = (req.getLoanPreference() == null || req.getLoanPreference().isBlank())
+                ? "미입력"
+                : req.getLoanPreference().trim();
+
+        int months = (req.getTargetMonths() == null) ? 0 : req.getTargetMonths();
+
+        // ScoreResult는 현재 SummaryDto에 넣진 않지만, 설명에는 표시(원치 않으면 제거 가능)
+        int overall = (score == null) ? 0 : score.getOverallScore();
 
         return String.format(
-        	    "선택 정책 %d개를 반영했습니다. (대출 변화: %+,d원 / 월 변화: %+,d원)\n대출 성향: %s, 목표 시점: %d개월, 예상 월상환(더미): %,d원",
-        	    selectedCount,
-        	    totalLoanDelta,
-        	    totalMonthlyDelta,
-        	    loanPref,
-        	    months,
-        	    estimatedMonthlyPayment
-        	); // 포맷 정리
+                "정책 %d개를 반영했습니다. (대출 한도 변화: %+,d원 / 월부담 변화: %+,d원)\n" +
+                "대출 성향: %s, 목표 시점: %d개월\n" +
+                "다운페이: %,d원, 대출한도: %,d원, 필요대출(추정): %,d원\n" +
+                "예상 월상환(추정): %,d원, 월부담비율: %s\n" +
+                "종합점수(임시): %d점",
+                selectedCount, loanDelta, monthlyDelta,
+                pref, months,
+                finance.getDownPayment(), finance.getLoanLimit(), finance.getNeededLoan(),
+                finance.getEstimatedMonthlyPayment(), finance.getMonthlyBurdenRatio(),
+                overall
+        );
     }
 }

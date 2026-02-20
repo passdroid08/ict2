@@ -26,5 +26,9 @@ public class PolicyImpactDto {
 	private String reasonSummary;
 	private List<String> conditions;
 	private String caution;
+	public Number getLoanDelta() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
 }
