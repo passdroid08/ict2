@@ -5,12 +5,12 @@ spring:
   datasource:
     driver-class-name: oracle.jdbc.OracleDriver
     url: jdbc:oracle:thin:@localhost:1521/XEPDB1
-    username: USER03
-    password: USER03
+    username: MYHOUSE
+    password: MYHOUSE
 
   jpa:
     hibernate:
-      ddl-auto: update   # 개발: update / 운영: validate 또는 none 권장
+      ddl-auto: validate   # 개발: update / 운영: validate 또는 none 권장
     properties:
       hibernate:
         format_sql: true
@@ -20,5 +20,10 @@ spring:
 
 logging:
   level:
-    org.hibernate.SQL: debug
-    org.hibernate.orm.jdbc.bind: trace   # 바인딩 파라미터까지 보고 싶을 때(시끄러우면 주석)
+    org.springframework.transaction: TRACE
+    org.springframework.transaction.interceptor: TRACE
+    org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.SQL: DEBUG
+    org.springframework.orm.jpa: DEBUG
+    org.springframework.dao: DEBUG
+
