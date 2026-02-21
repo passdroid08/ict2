@@ -9,13 +9,16 @@ public class WebConfig implements WebMvcConfigurer {
     
 	@Override
 	public void addCorsMappings(CorsRegistry registry) {
-		registry.addMapping("/api/**")
-	            .allowedOrigins("http://localhost:9191")
-	            .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-	            .allowedHeaders("*")
-	            .exposedHeaders("Authorization")
-	            .allowCredentials(true)
-	            .maxAge(3600);
+	    registry.addMapping("/api/**")
+	        .allowedOrigins(
+	            "http://localhost:9191",
+	            "https://hoppscotch.io"
+	        )
+	        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+	        .allowedHeaders("*")
+	        .exposedHeaders("Authorization")
+	        .allowCredentials(true)
+	        .maxAge(3600);
 	}
 
 }

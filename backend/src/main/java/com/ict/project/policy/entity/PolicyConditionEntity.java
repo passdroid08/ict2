@@ -41,6 +41,6 @@ public class PolicyConditionEntity {
     @Column(name = "CONDITION_VALUE_DATE")
     private LocalDateTime conditionValueDate;
 
-    @Column(name = "CONDITION_VALUE_BOOL", length = 1)
-    private String conditionValueBool;
+    @Column(name="CONDITION_VALUE_BOOL", columnDefinition="CHAR(1)")
+    private String conditionValuebool;
 }

@@ -1,5 +1,8 @@
 package com.ict.project.policy.entity;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.ict.project.entity.LocationEntity;
 
 import jakarta.persistence.*;
@@ -30,4 +33,7 @@ public class PolicyEntity {
 
     @Column(name = "POLICY_CATEGORY", length = 30)
     private String policyCategory;
+    
+    @OneToMany(mappedBy = "policy", fetch = FetchType.LAZY)
+    private List<PolicyEffectEntity> policyEffects = new ArrayList<>();
 }

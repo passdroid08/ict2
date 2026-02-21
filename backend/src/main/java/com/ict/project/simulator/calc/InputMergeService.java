@@ -2,6 +2,7 @@ package com.ict.project.simulator.calc;
 
 import java.math.BigDecimal;
 
+
 import org.springframework.stereotype.Component;
 
 import com.ict.project.simulator.calc.FinanceCalculator.FinanceInput;
@@ -9,6 +10,7 @@ import com.ict.project.simulator.dto.SimulationCalculateRequestDto;
 import com.ict.project.simulator.profile.ProfileService.ProfileSnapshot;
 import com.ict.project.simulator.recommendation.PreferenceScorer.PreferenceContext;
 import com.ict.project.simulator.recommendation.RecommendationServiceImpl.RecommendationRequest;
+import com.ict.project.simulator.utill.ValueConvertUtils;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -57,27 +59,49 @@ public class InputMergeService {
         ProfileSnapshot p = profile; // null 허용(게스트/미구현 단계 대비)
         SimulationCalculateRequestDto r = req;
 
-        // 1) FinanceInput 생성
+        // 1) FinanceInput 생성  req 우선, 없으면 DB(profile) 기본값
+     // p = profile, r = req
+
         FinanceInput financeInput = FinanceInput.builder()
-                // 요청이 우선(없으면 0)
-        		.cashAvailable(asLong(r != null ? r.getCashAvailable() : null))
-        		.emergencyFund(asLong(r != null ? r.getEmergencyFund() : null))
-        		.monthlyHousingBudget(asLong(r != null ? r.getMonthlyHousingBudget() : null))
-
-                // 성향 값 규격: "L1"~"L5" (프론트/백 공통 약속)
-                .loanPreference(r != null ? r.getLoanPreference() : null)
-
-                .targetMonths(r != null ? r.getTargetMonths() : null)
-                .targetPropertyPrice(r != null ? r.getTargetPropertyPrice() : null)
-
-                // 정책 합산치(없으면 0)
-                .policyLoanDelta(nvl(policyLoanDelta))
-                .policyMonthlyDelta(nvl(policyMonthlyDelta))
-
-                // 기본 금리/기간(필요 시 여기서 주입)
-                .annualInterestRate(defaultAnnualRate())
-                .loanTermMonths(defaultLoanTermMonths())
-                .build();
+        	    .cashAvailable(ValueConvertUtils.toLong(
+        	        r != null && r.getCashAvailable() != null
+        	            ? r.getCashAvailable()
+        	            : (p != null ? p.getCashAvailable() : null),
+        	        0L
+        	    ))
+        	    .emergencyFund(ValueConvertUtils.toLong(
+        	        r != null && r.getEmergencyFund() != null
+        	            ? r.getEmergencyFund()
+        	            : (p != null ? p.getEmergencyFund() : null),
+        	        0L
+        	    ))
+        	    .monthlyHousingBudget(ValueConvertUtils.toLong(
+        	        r != null && r.getMonthlyHousingBudget() != null
+        	            ? r.getMonthlyHousingBudget()
+        	            : (p != null ? p.getMonthlyHousingBudget() : null),
+        	        0L
+        	    ))
+        	    .loanPreference(
+        	        r != null && r.getLoanPreference() != null
+        	            ? r.getLoanPreference()
+        	            : (p != null ? p.getLoanPreference() : null)
+        	    )
+        	    .targetMonths(
+        	        r != null && r.getTargetMonths() != null
+        	            ? r.getTargetMonths()
+        	            : (p != null ? p.getTargetMonths() : null)
+        	    )
+        	    .targetPropertyPrice(ValueConvertUtils.toLong(
+        	        r != null && r.getTargetPropertyPrice() != null
+        	            ? r.getTargetPropertyPrice()
+        	            : (p != null ? p.getTargetPropertyPrice() : null),
+        	        0L
+        	    ))
+        	    .policyLoanDelta(nvl(policyLoanDelta))
+        	    .policyMonthlyDelta(nvl(policyMonthlyDelta))
+        	    .annualInterestRate(defaultAnnualRate())
+        	    .loanTermMonths(defaultLoanTermMonths())
+        	    .build();
 
         // 2) PreferenceContext(선호 점수화용) 생성
         // - 프로필 선호 + 요청 기반 조건만 담음 (학군/인프라는 PreferenceScorer에서 확장)
@@ -113,22 +137,22 @@ public class InputMergeService {
     // -----------------------------
 
     private BigDecimal defaultAnnualRate() {
-        // MVP 기본 4% (0.04)
+        // 기본 연이자율(연 금리) 반환용
+        // MVP에서는 고정값 4%(0.04)를 사용하고, 추후 DB/설정/대출상품에서 가져오도록 확장 가능
         return new BigDecimal("0.04");
     }
 
     private Integer defaultLoanTermMonths() {
-        // MVP 기본 30년(360개월)
+        // 기본 대출 기간(개월) 반환용
+        // MVP에서는 30년 = 360개월을 기본으로 사용(추후 상품/정책/사용자 선택으로 대체 가능)
         return 360;
     }
 
     private Long nvl(Long v) {
+        // null 방지용 유틸
+        // 정책 합산치 같은 값이 null로 들어오면 0으로 치환하여 계산이 끊기지 않게 함
         return v == null ? 0L : v;
-    }
-
-    private long asLong(Long v) {
-        return v == null ? 0L : v;
-    }
+    }    
 
     // -----------------------------
     // Output DTO

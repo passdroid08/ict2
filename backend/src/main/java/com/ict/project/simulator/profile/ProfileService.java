@@ -24,12 +24,20 @@ public interface ProfileService {
         private final String gender;
         private final String maritalStatus;
 
-        // 재무
+        // 재무(기존)
         private final BigDecimal annualIncome;
         private final BigDecimal assetAmount;
         private final BigDecimal debtAmount;
 
-        // 선택: 대출/선호/관심지역 (계산 확장용)
+        // ✅ 시뮬 입력 기본값(추가)
+        private final BigDecimal cashAvailable;
+        private final BigDecimal emergencyFund;
+        private final BigDecimal monthlyHousingBudget;
+        private final String loanPreference;        // "L1"~"L5"
+        private final Integer targetMonths;
+        private final BigDecimal targetPropertyPrice;
+
+        // 선택
         private final List<LoanSnapshot> loans;
         private final List<PreferenceSnapshot> preferences;
         private final List<InterestRegionSnapshot> interestRegions;

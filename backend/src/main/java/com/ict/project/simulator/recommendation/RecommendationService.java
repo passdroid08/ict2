@@ -7,7 +7,6 @@ import com.ict.project.entity.PropertyEntity;
 public interface RecommendationService {
 
     List<RecommendationServiceImpl.RecommendationItem> recommend(
-            List<PropertyEntity> candidates,
             RecommendationServiceImpl.RecommendationRequest req
     );
 }

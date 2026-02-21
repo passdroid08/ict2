@@ -50,6 +50,6 @@ public class PolicyEffectEntity {
     @Column(name = "EFFECT_VALUE_DATE")
     private LocalDateTime effectValueDate;
 
-    @Column(name = "EFFECT_VALUE_BOOL", length = 1)
+    @Column(name="EFFECT_VALUE_BOOL", columnDefinition="CHAR(1)")
     private String effectValueBool;
 }

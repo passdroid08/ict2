@@ -13,11 +13,13 @@ import org.springframework.stereotype.Service;
 
 import com.ict.project.entity.LocationEntity;
 import com.ict.project.entity.PropertyEntity;
+import com.ict.project.repository.PropertyRepository;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
 
 /**
  * RecommendationServiceImpl (MVP)
@@ -33,14 +35,18 @@ import lombok.NoArgsConstructor;
  * 4) 간단 점수화 후 상위 N개 반환
  */
 @Service
+@RequiredArgsConstructor
 public class RecommendationServiceImpl implements RecommendationService {
+	private final PropertyRepository propertyRepository;		
     /**
      * 추천 실행(Repository 없는 버전)
      * @param candidates 이미 조회된 후보 매물 리스트
      * @param req 추천 기준(예산/지역/면적/타입/상위개수 등)
      */
-    public List<RecommendationItem> recommend(List<PropertyEntity> candidates, 
-    											RecommendationRequest req) {
+    public List<RecommendationItem> recommend(RecommendationRequest req) {
+    	List<PropertyEntity> candidates =
+                propertyRepository.findAll(); // 일단 전체, 이후 조건 추가
+    	
         List<PropertyEntity> safeCandidates = candidates == null ? List.of() : candidates;
         RecommendationRequest r = req == null ? RecommendationRequest.builder().build() : req;
 

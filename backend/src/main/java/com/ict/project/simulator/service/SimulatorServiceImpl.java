@@ -1,33 +1,38 @@
 package com.ict.project.simulator.service;
 
 import java.time.LocalDateTime;
+
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ict.project.entity.PropertyEntity;
 import com.ict.project.policy.entity.PolicyEntity;
 import com.ict.project.policy.repository.PolicyRepository;
 import com.ict.project.simulator.calc.FinanceCalculator;
 import com.ict.project.simulator.calc.FinanceScorer;
 import com.ict.project.simulator.calc.InputMergeService;
 import com.ict.project.simulator.calc.PolicyImpactCalculator;
+import com.ict.project.simulator.calc.PolicyImpactCalculator.PolicyImpactResult;
 import com.ict.project.simulator.calc.FinanceCalculator.FinanceResult;
 import com.ict.project.simulator.calc.FinanceScorer.ScoreInput;
 import com.ict.project.simulator.calc.FinanceScorer.ScoreResult;
 import com.ict.project.simulator.calc.InputMergeService.MergedInput;
-import com.ict.project.simulator.calc.PolicyImpactCalculator.PolicyImpactResult;
+import com.ict.project.simulator.dto.FinanceSnapshotDto;
 import com.ict.project.simulator.dto.SimulationCalculateRequestDto;
 import com.ict.project.simulator.dto.SimulationCalculateResponseDto;
 import com.ict.project.simulator.dto.SummaryDto;
+import com.ict.project.simulator.entity.CostResultEntity;
 import com.ict.project.simulator.profile.ProfileService;
 import com.ict.project.simulator.profile.ProfileService.ProfileSnapshot;
+import com.ict.project.simulator.utill.ValueConvertUtils;
 
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 public class SimulatorServiceImpl implements SimulatorService {
 
     private final ProfileService profileService;
@@ -37,26 +42,33 @@ public class SimulatorServiceImpl implements SimulatorService {
     private final InputMergeService inputMergeService;
     private final FinanceCalculator financeCalculator;
     private final FinanceScorer financeScorer;
-    
+
     /**
      * loanPreference 정규화 규칙
      *
      * - 외부 입력은 유연하게 받되(문자열), 내부 계산/추천 로직은 표준 코드로만 처리한다.
-     * - null/blank/unknown 값은 기본값("NONE")으로 치환한다.
+     * - null/blank/unknown 값은 기본값("L3")으로 치환한다.
      * - 향후 코드 체계가 바뀌어도 이 메소드만 수정하면 되도록 중앙집중화한다.
      */
-    private String normalizeLoanPreference(String raw) {
-        if (raw == null) return "NONE";
-        String v = raw.trim();
-        if (v.isEmpty()) return "NONE";
+    private String normalizeLoanPreference(String loanPreference) {
+        if (loanPreference == null) return "L3";
 
-        String u = v.toUpperCase();
-        if (u.equals("NONE") || v.equals("없음")) return "NONE";
-        if (u.equals("CONSERVATIVE") || v.equals("보수")) return "CONSERVATIVE";
-        if (u.equals("MAX") || v.equals("최대")) return "MAX";
+        String p = loanPreference.trim().toUpperCase();
 
-        // 알 수 없는 값은 안전한 기본값으로 처리(필요 시 로깅 포인트)
-        return "NONE";
+        // 프론트 3단계
+        if (p.equals("CONSERVATIVE")) return "L2";
+        if (p.equals("BALANCED"))     return "L3";
+        if (p.equals("AGGRESSIVE"))   return "L4";
+
+        // 기존/다른 입력값 (혹시 남아있다면)
+        if (p.equals("NONE")) return "L1";
+        if (p.equals("MAX"))  return "L5";
+
+        // 이미 L1~L5로 온 경우 그대로
+        if (p.matches("^L[1-5]$")) return p;
+
+        // 알 수 없는 값은 중립으로
+        return "L3";
     }
 
     @Override
@@ -64,57 +76,95 @@ public class SimulatorServiceImpl implements SimulatorService {
         SimulationCalculateRequestDto req = (request == null)
                 ? SimulationCalculateRequestDto.builder().build()
                 : request;
-        
-        // 이후 merged/계산 로직에는 normalizedLoanPreference를 사용(또는 req를 복사해 반영)
-        String normalizedLoanPreference = normalizeLoanPreference(req.getLoanPreference());
 
-        // 1) 프로필 스냅샷(없거나 실패해도 계산은 진행)
-        ProfileSnapshot profile = null;
+        // 0) userId 필수 체크
         Long userId = req.getUserId();
-        if (userId != null) {
-            try {
-                profile = profileService.loadProfileSnapshot(userId);
-            } catch (Exception ignored) {
-                profile = null;
-            }
+        if (userId == null) {
+            throw new IllegalArgumentException("userId는 필수입니다.");
         }
 
-        // 2) 정책 목록 로드 + 적용/필터/합산(현재는 합산값 0, DTO만 구성)
-        List<PolicyEntity> allPolicies = policyRepository.findAll();
-        PolicyImpactResult policyResult = policyImpactCalculator.evaluate(allPolicies, req.getSelectedPolicyIds());
+        // 1) loanPreference 정규화 결과를 실제 계산 입력(req)에 반영
+        req.setLoanPreference(normalizeLoanPreference(req.getLoanPreference()));
 
-        // 3) 입력 병합(요청DTO + 프로필 + 정책 합산치)
+        // 2) 프로필 스냅샷(없으면 400)
+        ProfileSnapshot profile;
+        try {
+            profile = profileService.loadProfileSnapshot(userId);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("프로필 로드 실패: " + e.getMessage(), e);
+        }
+
+        // 3) 정책 목록 로드
+
+     // 1) 자격/목록 생성
+        PolicyImpactCalculator.PolicyResult policyResult =
+                policyImpactCalculator.evaluateEligibility(profile, req.getSelectedPolicyIds());
+
+      
+        CostResultEntity costResult = new CostResultEntity(); // 이미 만들어진/조회된 인스턴스
+
+        // 2) base가 있으면 영향 계산(없으면 null로 호출해도 됨)
+       // 1️⃣ 필요한 값들만 먼저 정리
+       // costResult는 "이미 계산이 끝난" CostResultEntity (세금/대출금액이 채워진 상태)
+        long loanBaseAmount = costResult.getLoanAmount() == null ? 0L : costResult.getLoanAmount().longValue();
+        long taxBaseAmount  = costResult.getTaxAmount()  == null ? 0L : costResult.getTaxAmount().longValue();
+
+        PolicyImpactCalculator.PolicyBase base =
+            PolicyImpactCalculator.PolicyBase.builder()
+                .loanBaseAmount(loanBaseAmount)
+                .taxBaseAmount(taxBaseAmount)
+                .build();
+
+        // 이제 CostResultEntity를 PolicyImpactCalculator로 넘기지 않음
+        PolicyImpactCalculator.PolicyImpactResult impactResult =
+        	    policyImpactCalculator.applyImpact(policyResult, base);
+
+        // 3) merge는 impactResult 합산치로
         MergedInput merged = inputMergeService.merge(
-                profile,
-                req,
-                policyResult.getTotalLoanDelta(),
-                policyResult.getTotalMonthlyDelta()
-        );
-
-        // 4) 재무 계산(Real)
+                profile, req,
+                impactResult.getTotalLoanDelta(),
+                impactResult.getTotalMonthlyDelta()
+                );
+          
+        // 5) 재무 계산(Real)
         FinanceResult finance = financeCalculator.calculate(merged.getFinanceInput());
 
-        // 5) 점수/레벨 계산(요약에 쓰고 싶을 때 확장 가능)
+        // 6) 점수/레벨 계산(요약에 쓰고 싶을 때 확장 가능)
         ScoreResult score = financeScorer.score(
                 finance,
                 ScoreInput.builder().targetPropertyPrice(req.getTargetPropertyPrice()).build()
         );
 
-        // 6) SummaryDto 조립(프론트가 쓰는 필드만)
+        // 7) SummaryDto 조립(프론트가 쓰는 필드만)
         SummaryDto summary = SummaryDto.builder()
                 .purchaseRange(formatWonRange(finance.getPurchaseRangeLow(), finance.getPurchaseRangeHigh()))
                 .assetSafety(finance.getAssetSafety())
                 .goalFeasibility(finance.getGoalFeasibility())
                 .monthlyBurdenRatio(finance.getMonthlyBurdenRatio())
                 .build();
+        
+        FinanceSnapshotDto snapshot = FinanceSnapshotDto.builder()
+                .userId(req.getUserId())
+                // 아래는 ProfileSnapshot이 제공하는 getter에 맞춰 바꾸세요
+                .annualIncome(profile.getAnnualIncome())
+                .assetAmount(profile.getAssetAmount())
+                .debtAmount(profile.getDebtAmount())
+                .cashAvailable(profile.getCashAvailable())
+                .emergencyFund(profile.getEmergencyFund())
+                .monthlyHousingBudget(profile.getMonthlyHousingBudget())
+                .loanPreference(req.getLoanPreference()) // 정규화된 값
+                .targetMonths(req.getTargetMonths())
+                .targetPropertyPrice(ValueConvertUtils.toBigDecimal(req.getTargetPropertyPrice()))
+                .build();
 
-        // 7) 설명문(일단 서비스에서 조립, 추후 템플릿/AI로 교체 가능)
-        String explanation = buildExplanation(req, policyResult, finance, score);
+        // 8) 설명문
+        String explanation = buildExplanation(req, impactResult, finance, score);
 
         return SimulationCalculateResponseDto.builder()
                 .summaryDto(summary)
                 .policyList(policyResult.getPolicyList())
-                .appliedPolicyIds(policyResult.getAppliedPolicyIds())
+                .appliedPolicyIds(impactResult.getAppliedPolicyIds())
+                .financeSnapshot(snapshot)
                 .explanation(explanation)
                 .calculatedAt(LocalDateTime.now())
                 .build();

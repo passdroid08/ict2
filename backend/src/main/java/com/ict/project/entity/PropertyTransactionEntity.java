@@ -39,13 +39,13 @@ public class PropertyTransactionEntity {
     private LocalDateTime contractDate;
     
     
-    @Column(name = "CANCELED", length = 1)
+    @Column(name = "CANCELED", columnDefinition = "CHAR(1)")
     private String canceled;
 
     @Column(name = "FLOOR")
     private Integer floor;
 
-    @Column(name = "BROKERAGE_YN", length = 1)
+    @Column(name = "BROKERAGE_YN", columnDefinition = "CHAR(1)")
     private String brokerageYn;
 
     @Column(name = "AGENT_REGION", length = 50)
