@@ -10,11 +10,9 @@ export default function AuthRoute(){
    
     const isAuth = sessionStorage.getItem(AUTH_KEY.USERNAME);   
     const context = useOutletContext();
-    console.log('(AuthRoute.jsx)context:',context);
 
     //원래 페이지로 이동하기 위해 useLocation훅 사용
     const location = useLocation(); 
-    console.log('(AuthRoute.jsx)location:',location);
     //로그인이 안되어 있으면
     if(!isAuth){
         window.alert('로그인 후 이용하세요');

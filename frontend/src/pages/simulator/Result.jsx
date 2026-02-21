@@ -10,7 +10,7 @@ import PolicyDetailModal from "./ResultPolicy/PolicyDetailModal";
 import Loading from "../../components/Loading";
 import Failure from "../../components/Failure";
 import PolicyList from "./ResultPolicy/PolicyList";
-import { RESULT_REQUEST_ACTION } from "../../config/constants";
+import { FORM_ACTION, RESULT_REQUEST_ACTION } from "../../config/constants";
 import resultRequestReducer, {
   initialResultRequestState,
 } from "../../reducer/resultRequestReducer";
@@ -21,28 +21,44 @@ import {
   getRequestErrorMessage,
 } from "./RequestAndFetch";
 
+const toNum = (v) => {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const loanCodeToSlider = (v) => {
+  if (v == null) return null;
+  const m = String(v).toUpperCase().match(/^L([1-5])$/);
+  return m ? Number(m[1]) : null;
+};
+
 export default function Result() {
   const navigate = useNavigate();
+
   const [open, setOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
   const [selectedPolicyIds, setSelectedPolicyIds] = useState([]);
-  
+
   const [requestState, requestDispatch] = useReducer(
     resultRequestReducer,
     initialResultRequestState
   );
 
-  const { formState } = useFormContext();
+  const { formState, dispatch } = useFormContext();
   const f = formState.fields;
+
   const debounceRef = useRef(null);
+
+  const skipNextRecalcRef = useRef(false);
 
   const handleApplyPolicy = (policyId) => {
     const next = selectedPolicyIds.includes(policyId)
-      ? selectedPolicyIds.filter((id) => id !== policyId) // ✅ 해제
-      : [...selectedPolicyIds, policyId];                  // ✅ 적용
+      ? selectedPolicyIds.filter((id) => id !== policyId)
+      : [...selectedPolicyIds, policyId];
 
     setSelectedPolicyIds(next);
-    clearTimeout(debounceRef.current);    
+    clearTimeout(debounceRef.current);
     recalculate(next);
     setSelectedPolicy(null);
   };
@@ -69,14 +85,53 @@ export default function Result() {
 
     const init = async () => {
       requestDispatch({ type: RESULT_REQUEST_ACTION.FETCH_START });
+
       try {
         const res = await requestInitialSimulation(f);
         if (!alive) return;
+
         requestDispatch({
           type: RESULT_REQUEST_ACTION.FETCH_SUCCESS,
           payload: res.data,
         });
+
         console.log("simulation response body(FirstCal)", res.data);
+
+        
+        if (!formState.dirty) {
+          const snap = res.data?.financeSnapshot;
+          if (snap) {
+            // 이 dispatch로 인해 f 값 변경 -> 자동 재계산 useEffect가 바로 돌 수 있어서 1회 스킵
+            skipNextRecalcRef.current = true;
+
+            dispatch({
+              type: FORM_ACTION.SET_FIELD,
+              payload: { key: "cash", value: toNum(snap.cashAvailable) },
+            });
+            dispatch({
+              type: FORM_ACTION.SET_FIELD,
+              payload: {
+                key: "monthlyLimit",
+                value: toNum(snap.monthlyHousingBudget),
+              },
+            });
+            dispatch({
+              type: FORM_ACTION.SET_FIELD,
+              payload: { key: "emergencyFund", value: toNum(snap.emergencyFund) },
+            });
+            dispatch({
+              type: FORM_ACTION.SET_FIELD,
+              payload: {
+                key: "loanPreference",
+                value: loanCodeToSlider(snap.loanPreference),
+              },
+            });
+
+            // 목표값은 사용자 선택이 맞으니(현재 결론) 초기에는 건드리지 않음
+            // dispatch({ type: FORM_ACTION.SET_FIELD, payload: { key: "targetMonths", value: toNum(snap.targetMonths) } });
+            // dispatch({ type: FORM_ACTION.SET_FIELD, payload: { key: "targetPrice", value: toNum(snap.targetPropertyPrice) } });
+          }
+        }
       } catch (err) {
         if (!alive) return;
         requestDispatch({
@@ -90,30 +145,37 @@ export default function Result() {
     return () => {
       alive = false;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 초기 1회
 
   useEffect(() => {
     if (!requestState.data) return; // 초기 fetch 전에는 스킵
+
+    if (skipNextRecalcRef.current) {
+      skipNextRecalcRef.current = false;
+      return;
+    }
+
     clearTimeout(debounceRef.current);
 
-      debounceRef.current = setTimeout(() => {
-          recalculate(selectedPolicyIds);
-        }, 300);
-  }, [
-      f.cash,
-      f.monthlyLimit,
-      f.emergencyFund,
-      f.loanPreference,
-      f.targetMonths,
-      f.targetPrice,
-  ]);
+    debounceRef.current = setTimeout(() => {
+      recalculate(selectedPolicyIds);
+    }, 300);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    f.cash,
+    f.monthlyLimit,
+    f.emergencyFund,
+    f.loanPreference,
+    f.targetMonths,
+    f.targetPrice,
+  ]);
 
   if (requestState.loading) return <Loading />;
   if (requestState.error && !requestState.data) {
     return <Failure message={requestState.error} />;
   }
-
 
   return (
     <>
@@ -125,7 +187,7 @@ export default function Result() {
             <div style={{ ...styles.card }}>
               <div style={styles.resultBody}>
                 <div style={styles.subMaintitle}>Summary</div>
-                <Summary summary={requestState.data?.summary} />
+                <Summary summary={requestState.data?.summaryDto} />
                 <div style={styles.explain}>
                   설명 영역: 결과 근거 및 정책 제안 부분
                 </div>
@@ -135,9 +197,9 @@ export default function Result() {
                 <div>
                   <div style={styles.subMaintitle}>PolicyList</div>
                   <PolicyList
-                      policies={requestState.data?.policyList || []}
-                      selectedPolicyIds={selectedPolicyIds}   
-                      onSelectPolicy={(p) => setSelectedPolicy(p)}
+                    policies={requestState.data?.policyList || []}
+                    selectedPolicyIds={selectedPolicyIds}
+                    onSelectPolicy={(p) => setSelectedPolicy(p)}
                   />
                 </div>
 
@@ -171,7 +233,10 @@ export default function Result() {
             </button>
 
             <div
-              style={{ ...styles.rightCol, ...(open ? styles.rightColOpen : null) }}
+              style={{
+                ...styles.rightCol,
+                ...(open ? styles.rightColOpen : null),
+              }}
               onClick={() => setOpen(false)}
             >
               <div

@@ -4,7 +4,16 @@ import styles from "../styles";
 
 export default function FieldBlock({ title, right, fieldKey, min, max, step }) {
   const { formState, dispatch } = useFormContext();
-  const value = formState.fields?.[fieldKey] ?? 0;
+  const raw = formState.fields?.[fieldKey];
+  const value = raw ?? 0;
+
+<div style={styles.fieldValue}>
+  {raw == null
+    ? "미선택"
+    : (right === "원"
+        ? `${value.toLocaleString("ko-KR")}${right}`
+        : `${value}${right}`)}
+</div>
 
   // 구간 값 계산 (개월이면 10단위 스냅, 그 외 step 스냅)
   const isMonths = right === "개월" || fieldKey === "targetMonths";

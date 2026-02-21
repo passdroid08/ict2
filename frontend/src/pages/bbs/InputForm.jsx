@@ -45,7 +45,6 @@ export default function InputForm(){
         axios
             .post(URL.BBS,{title:titleNode.value.trim(),content:contentNode.value.trim(),username,postDate,views:0})
             .then(res=>{
-                console.log('게시글 등록시 백엔드 서버에서 받은 데이타:',res.data);
                 //☞페이징을 위한 총 글 수정
                 dispatch({type:BBS.WRITE});                
                 //등록후 목록으로 이동

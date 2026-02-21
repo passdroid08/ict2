@@ -16,14 +16,12 @@ export default function Detail(){
     console.log('게시글 아이디:',id);*/
 
     const {state}= useLocation();  
-    console.log('(Detail.jsx)상세보기 글:',state);
 
     //아이디 대신 이름 출력용
     //☞삭제시 글 총수 변경을 위한 setTotalSize함수 추가
     const {usersInfo} = useUsersContext();
     const {users} = usersInfo;
     const {dispatch} = useBbsContext();
-    console.log('(Detail.jsx)users:',users);
     const name =users.length!==0 ? users.filter(user=>user.username===state.username)[0].name:null;
 
 

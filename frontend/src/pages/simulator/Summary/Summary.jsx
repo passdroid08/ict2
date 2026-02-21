@@ -2,7 +2,6 @@ import KpiBox from "../Component/KpiBox";
 import styles from "../styles";
 
 export default function Summary({ summary }) {
-
     return <>
         <div style={styles.kpiGrid}>
                 <div style={styles.kpiMain}>

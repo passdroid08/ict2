@@ -8,9 +8,7 @@
 import { USERS } from "../config/constants";
 
 const usersReducer = (state,action)=>{
-
-    console.log('(usersReducer.js)state:',state);//{users:[],isAuthenticated:null}
-    console.log('(usersReducer.js)action:',action);//{users:[{],{},...],isAuthenticated:'kim'}
+    
     switch(action.type){
         case USERS.ALL://모든 사용자 목록 요청
             return {...state,users:action.users,isAuthenticated:action.isAuthenticated}

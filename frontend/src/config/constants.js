@@ -50,20 +50,12 @@ export const SIMULATOR_GROUPS = [
 
 //입력 패널 버튼 클릭시 생성 블락 상수
 export const SIMULATOR_BLOCKS = [
-  { group: "CASH", title: "가용 현금", right: "원", fieldKey: "cash", min: 0, max: 10000000, step: 10000 },
-  { group: "MONTHLY", title: "월 한도", right: "원", fieldKey: "monthlyLimit", min: 0, max: 5000000, step: 10000 },
-  { group: "EMG", title: "비상금", right: "원", fieldKey: "emergencyFund", min: 0, max: 10000000, step: 10000 },
+  { group: "CASH", title: "가용 현금", right: "원", fieldKey: "cash", min: 0, max: 1000000000, step: 10000 },
+  { group: "MONTHLY", title: "월 한도", right: "원", fieldKey: "monthlyLimit", min: 0, max: 10000000, step: 10000 },
+  { group: "EMG", title: "비상금", right: "원", fieldKey: "emergencyFund", min: 0, max: 500000000, step: 10000 },
   { group: "LOAN", title: "대출 성향", right: "", fieldKey: "loanPreference", min: 1, max: 5, step: 1 },
   { group: "TIME", title: "목표 시점", right: "개월", fieldKey: "targetMonths", min: 1, max: 120, step: 1 },
   { group: "PRICE", title: "목표 매물", right: "원", fieldKey: "targetPrice", min: 0, max: 3000000000, step: 10000000 },
 ];
-//슬라이더 초기 Valule 상수
-export const FORM_DEFAULT = {
-  CASH: 0,             // 가용 현금
-  MONTHLY_LIMIT: 1250000,    // 월 한도
-  EMERGENCY_FUND: 0,   // 비상금
-  LOAN_PREFERENCE: 3, // 대출 성향
-  TARGET_MONTHS: 12,   // 목표 시점(개월)
-  TARGET_PRICE: 0,     // 목표 매물(금액)
-};
+
 

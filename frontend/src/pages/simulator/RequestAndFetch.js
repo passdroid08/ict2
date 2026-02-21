@@ -9,16 +9,23 @@ const toLoanPreference = (v) => {
   return "AGGRESSIVE";
 };
 
-const buildSimulationRequestBody = (fields, selectedPolicyIds = DEFAULT_POLICY_IDS) => ({
-  cashAvailable: fields.cash,
-  monthlyHousingBudget: fields.monthlyLimit,
-  emergencyFund: fields.emergencyFund,
-  loanPreference: toLoanPreference(fields.loanPreference),
-  targetMonths: fields.targetMonths,
-  targetPropertyPrice: fields.targetPrice,
-  selectedPolicyIds,
-  requestedAt: new Date().toISOString(),
-});
+export const buildSimulationRequestBody = (fields, selectedPolicyIds = []) => {
+  const body = {
+    userId: 2, // TODO: 나중에 session에서 가져오기
+    selectedPolicyIds,
+  };
+
+  // 사용자가 값 세팅한 것만 포함 (null/undefined면 미포함)
+  if (fields?.cash != null) body.cashAvailable = Number(fields.cash);
+  if (fields?.monthlyLimit != null) body.monthlyHousingBudget = Number(fields.monthlyLimit);
+  if (fields?.emergencyFund != null) body.emergencyFund = Number(fields.emergencyFund);
+
+  if (fields?.loanPreference != null) body.loanPreference = toLoanPreference(fields.loanPreference);
+  if (fields?.targetMonths != null) body.targetMonths = Number(fields.targetMonths);
+  if (fields?.targetPrice != null) body.targetPropertyPrice = Number(fields.targetPrice);
+
+  return body;
+};
 
 const requestSimulation = (fields, selectedPolicyIds = DEFAULT_POLICY_IDS) => {
   const body = buildSimulationRequestBody(fields, selectedPolicyIds);
