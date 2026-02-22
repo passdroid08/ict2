@@ -2,6 +2,9 @@ package com.ict.project.simulator.calc;
 
 import org.springframework.stereotype.Component;
 
+import com.ict.project.simulator.calc.dto.TimeInputDto;
+import com.ict.project.simulator.calc.dto.TimeResultDto;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -41,8 +44,8 @@ import lombok.NoArgsConstructor;
 @Component
 public class TimeProjectionCalculator {
 
-    public TimeResult project(TimeInput in) {
-        TimeInput input = (in == null) ? TimeInput.builder().build() : in;
+    public TimeResultDto project(TimeInputDto in) {
+        TimeInputDto input = (in == null) ? TimeInputDto.builder().build() : in;
 
         int months = input.getTargetMonths() == null ? 0 : input.getTargetMonths();
         if (months < 0) months = 0;
@@ -70,7 +73,7 @@ public class TimeProjectionCalculator {
         // 4) 시간축 기반 달성 가능성(목표가격이 있을 때만)
         String feasibilityByTime = judgeFeasibilityByTime(targetPrice, maxAffordableNow, projectedCashAtTarget);
 
-        return TimeResult.builder()
+        return TimeResultDto.builder()
                 .targetMonths(months)
                 .monthlySaving(monthlySaving)
                 .projectedSavingTotal(projectedSavingTotal)
@@ -124,41 +127,7 @@ public class TimeProjectionCalculator {
     // DTOs
     // -----------------------------
 
-    @Getter
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TimeInput {
-        private Integer targetMonths;
+    
 
-        // 현재 가진 현금(다운페이 기준): (cashAvailable - emergencyFund) 같은 값
-        private Long downPayment;
-
-        // 사용자 월 주거비 한도(저축 가정에 사용)
-        private Long monthlyHousingBudget;
-
-        // 목표 매물 가격(있으면 목표 달성 가능성 판단에 사용)
-        private Long targetPropertyPrice;
-
-        // 현재 시점 구매가능액(있으면 "이미 달성" 판단에 사용)
-        private Long maxAffordableNow;
-
-        // 월 저축률(0~1). null이면 기본 0.20(20%)
-        private Double savingRate;
-    }
-
-    @Getter
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TimeResult {
-        private int targetMonths;
-
-        private long monthlySaving;
-        private long projectedSavingTotal;
-        private long projectedCashAtTarget;
-
-        // "LOW/MID/HIGH"
-        private String feasibilityByTime;
-    }
+    
 }

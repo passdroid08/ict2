@@ -5,6 +5,9 @@ import java.math.RoundingMode;
 
 import org.springframework.stereotype.Component;
 
+import com.ict.project.simulator.calc.dto.FinanceInputDto;
+import com.ict.project.simulator.calc.dto.FinanceResultDto;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,8 +28,8 @@ public class FinanceCalculator {
 	/**
 	 * 메인 계산 메소드
 	 */
-	public FinanceResult calculate(FinanceInput in) {
-		FinanceInput input = (in == null) ? FinanceInput.builder().build() : in;
+	public FinanceResultDto calculate(FinanceInputDto in) {
+		FinanceInputDto input = (in == null) ? FinanceInputDto.builder().build() : in;
 
 		long cashAvailable = nvl(input.getCashAvailable());
 		long emergencyFund = nvl(input.getEmergencyFund());
@@ -93,7 +96,7 @@ public class FinanceCalculator {
 		// 10) 목표 달성 가능성(목표 가격 대비 구매가능액 기준)
 		String goalFeasibility = judgeGoalFeasibility(targetPropertyPrice, maxAffordableNow, maxAffordableAtTarget);
 
-		return FinanceResult.builder().downPayment(downPayment).loanLimit(finalLoanLimit)
+		return FinanceResultDto.builder().downPayment(downPayment).loanLimit(finalLoanLimit)
 				.maxAffordableNow(maxAffordableNow).maxAffordableAtTarget(maxAffordableAtTarget)
 				.purchaseRangeLow(rangeLow).purchaseRangeHigh(rangeHigh).neededLoan(neededLoan)
 				.estimatedMonthlyPayment(finalEstimatedMonthlyPayment).monthlyBurdenRatio(monthlyBurdenRatio)
@@ -303,9 +306,7 @@ public class FinanceCalculator {
 	// -----------------------------
 	// DTOs
 	// -----------------------------
-
 	@Getter
-	@Setter
 	@Builder
 	@NoArgsConstructor
 	@AllArgsConstructor
@@ -314,34 +315,24 @@ public class FinanceCalculator {
 		private Long emergencyFund;
 		private Long monthlyHousingBudget;
 
+		/** 정책으로 인해 추가/감소되는 대출 가능액(+) */
+		private Long policyLoanDelta;
+
+		/** 정책으로 인해 추가/감소되는 월부담 허용치(+) */
+		private Long policyMonthlyDelta;
+
+		/** 사용자 대출 성향: "L1"~"L5" */
 		private String loanPreference;
+
+		/** 목표 개월수(시간축) */
 		private Integer targetMonths;
+
+		/** 목표 매물 가격 */
 		private Long targetPropertyPrice;
-
-		// 정책 영향(PolicyImpactCalculator 결과 합산치 같은 것)
-		private Long policyLoanDelta; // 대출 한도 증감
-		private Long policyMonthlyDelta; // 월부담 증감
-
-		// 이자/기간(프로젝트 규칙 확정되면 외부에서 주입)
-		// annualInterestRate: 예) 0.04 (=4%)
-		private BigDecimal annualInterestRate;
-		private Integer loanTermMonths; // 기본 360(30년)
-		
-		public FinanceInput copy() {
-		    return FinanceInput.builder()
-		        .cashAvailable(this.cashAvailable)
-		        .emergencyFund(this.emergencyFund)
-		        .monthlyHousingBudget(this.monthlyHousingBudget)
-		        .loanPreference(this.loanPreference)
-		        .targetMonths(this.targetMonths)
-		        .targetPropertyPrice(this.targetPropertyPrice)
-		        .policyLoanDelta(this.policyLoanDelta)
-		        .policyMonthlyDelta(this.policyMonthlyDelta)
-		        .annualInterestRate(this.annualInterestRate)
-		        .loanTermMonths(this.loanTermMonths)
-		        .build();
-		}
 	}
+
+
+	
 	
 	
 

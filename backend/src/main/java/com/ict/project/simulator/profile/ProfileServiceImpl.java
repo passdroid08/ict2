@@ -1,5 +1,11 @@
 package com.ict.project.simulator.profile;
 
+import com.ict.project.simulator.dto.ProfileSnapshotDto;
+
+import com.ict.project.simulator.dto.LoanSnapshotDto;
+import com.ict.project.simulator.dto.PreferenceSnapshotDto;
+import com.ict.project.simulator.dto.InterestRegionSnapshotDto;
+
 import com.ict.project.repository.UserInterestRegionRepository;
 import com.ict.project.repository.UserLoanRepository;
 import com.ict.project.repository.UserPreferenceRepository;
@@ -32,7 +38,7 @@ public class ProfileServiceImpl implements ProfileService {
     private EntityManager em;
 
     @Override
-    public ProfileSnapshot loadProfileSnapshot(Long userId) {
+    public ProfileSnapshotDto loadProfileSnapshot(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId는 null일 수 없습니다.");
         }
@@ -50,9 +56,9 @@ public class ProfileServiceImpl implements ProfileService {
         List<UserInterestRegionEntity> regionEntities = userInterestRegionRepository.findAllByUsers_UserId(userId);
 
         // 3) 엔티티 → Snapshot 변환
-        List<LoanSnapshot> loans = new ArrayList<>();
+        List<LoanSnapshotDto> loans = new ArrayList<>();
         for (UserLoanEntity ul : loanEntities) {
-            loans.add(LoanSnapshot.builder()
+            loans.add(LoanSnapshotDto.builder()
                     .userLoanId(ul.getUserLoanId())
                     .loanId(ul.getLoanProduct() != null ? ul.getLoanProduct().getLoanId() : null)
                     .approvedAmount(ul.getApprovedAmount())
@@ -61,9 +67,9 @@ public class ProfileServiceImpl implements ProfileService {
                     .build());
         }
 
-        List<PreferenceSnapshot> preferences = new ArrayList<>();
+        List<PreferenceSnapshotDto> preferences = new ArrayList<>();
         for (UserPreferenceEntity up : prefEntities) {
-            preferences.add(PreferenceSnapshot.builder()
+            preferences.add(PreferenceSnapshotDto.builder()
                     .prefId(up.getPrefId())
                     .prefKey(up.getPrefKey())
                     .prefWeight(up.getPrefWeight())
@@ -71,16 +77,16 @@ public class ProfileServiceImpl implements ProfileService {
                     .build());
         }
 
-        List<InterestRegionSnapshot> interestRegions = new ArrayList<>();
+        List<InterestRegionSnapshotDto> interestRegions = new ArrayList<>();
         for (UserInterestRegionEntity ur : regionEntities) {
-            interestRegions.add(InterestRegionSnapshot.builder()
+            interestRegions.add(InterestRegionSnapshotDto.builder()
                     .interestId(ur.getInterestId())
                     .regionCode(ur.getLocation() != null ? ur.getLocation().getRegionCode() : null)
                     .build());
         }
 
         // 4) 최종 ProfileSnapshot
-        return ProfileSnapshot.builder()
+        return ProfileSnapshotDto.builder()
                 .userId(userId)
                 .name(profile != null ? profile.getName() : null)
                 .age(profile != null ? profile.getAge() : null)

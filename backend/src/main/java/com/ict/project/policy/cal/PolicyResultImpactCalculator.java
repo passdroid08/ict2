@@ -7,6 +7,8 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import com.ict.project.policy.dto.PolicyBaseDto;
+import com.ict.project.policy.dto.ResultDeltaDto;
 import com.ict.project.policy.entity.PolicyEffectEntity;
 import com.ict.project.policy.repository.PolicyEffectRepository;
 
@@ -25,22 +27,7 @@ public class PolicyResultImpactCalculator {
     // RESULT 단계 계산 기준값
     // - RESULT 정책 중 MULTIPLY/REPLACE는 "기준값"이 필요합니다.
     // =========================================================
-    @Getter
-    @Builder
-    public static class PolicyBase {
-        private final long loanBaseAmount;
-        private final long taxBaseAmount;
-        private final long monthlyBaseAmount;
-    }
-
-    @Getter
-    @Builder
-    @AllArgsConstructor
-    public static class ResultDelta {
-        private final long loanDelta;
-        private final long monthlyDelta;
-        private final long taxDelta;
-    }
+    
 
     /**
      * DB에서 policyId의 RESULT 효과만 조회하여,
@@ -54,10 +41,10 @@ public class PolicyResultImpactCalculator {
      * - INPUT 효과(LTV_BONUS 등)는 여기서 절대 loanDelta에 반영하지 않습니다.
      *   (INPUT 영향은 SimulatorServiceImpl에서 assumed diff 방식으로만 계산)
      */
-    public ResultDelta computeResultDeltaFromDb(Long policyId, PolicyBase base, List<String> reasons) {
+    public ResultDeltaDto computeResultDeltaFromDb(Long policyId, PolicyBaseDto base, List<String> reasons) {
 
         if (policyId == null) {
-            return new ResultDelta(0L, 0L, 0L);
+            return new ResultDeltaDto(0L, 0L, 0L);
         }
 
         List<PolicyEffectEntity> effects = effectRepository.findByPolicy_PolicyId(policyId);
@@ -121,7 +108,7 @@ public class PolicyResultImpactCalculator {
             }
         }
 
-        return new ResultDelta(loanDeltaSum, monthlyDeltaSum, taxDeltaSum);
+        return new ResultDeltaDto(loanDeltaSum, monthlyDeltaSum, taxDeltaSum);
     }
 
     // =========================================================

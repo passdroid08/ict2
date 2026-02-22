@@ -45,7 +45,6 @@ public class FinanceSnapshotEntity {
         if (snapshotAt == null) snapshotAt = LocalDateTime.now();
     }
 
-
     @Column(name = "CASH_ASSET", precision = 15, scale = 0)
     private BigDecimal cashAsset;
 
