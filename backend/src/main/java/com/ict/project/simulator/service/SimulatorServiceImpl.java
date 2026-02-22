@@ -1,21 +1,19 @@
 package com.ict.project.simulator.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ict.project.entity.PropertyEntity;
-import com.ict.project.policy.entity.PolicyEntity;
+import com.ict.project.policy.cal.PolicyImpactCalculator;
+import com.ict.project.policy.cal.PolicyImpactCalculator.PolicyImpactResult;
 import com.ict.project.policy.repository.PolicyRepository;
+import com.ict.project.simulator.calc.CostResultCalculator;
 import com.ict.project.simulator.calc.FinanceCalculator;
+import com.ict.project.simulator.calc.FinanceCalculator.FinanceResult;
 import com.ict.project.simulator.calc.FinanceScorer;
 import com.ict.project.simulator.calc.InputMergeService;
-import com.ict.project.simulator.calc.PolicyImpactCalculator;
-import com.ict.project.simulator.calc.PolicyImpactCalculator.PolicyImpactResult;
-import com.ict.project.simulator.calc.FinanceCalculator.FinanceResult;
 import com.ict.project.simulator.calc.FinanceScorer.ScoreInput;
 import com.ict.project.simulator.calc.FinanceScorer.ScoreResult;
 import com.ict.project.simulator.calc.InputMergeService.MergedInput;
@@ -38,36 +36,38 @@ public class SimulatorServiceImpl implements SimulatorService {
     private final ProfileService profileService;
     private final PolicyRepository policyRepository;
 
+    private final CostResultCalculator costResultCalculator;
     private final PolicyImpactCalculator policyImpactCalculator;
     private final InputMergeService inputMergeService;
     private final FinanceCalculator financeCalculator;
     private final FinanceScorer financeScorer;
 
+    // =========================
+    // Debug toggle
+    // =========================
+    private static final boolean DEBUG = true;
+
+    private void dbg(String msg) {
+        if (DEBUG) System.out.println(msg);
+    }
+
     /**
      * loanPreference 정규화 규칙
-     *
-     * - 외부 입력은 유연하게 받되(문자열), 내부 계산/추천 로직은 표준 코드로만 처리한다.
-     * - null/blank/unknown 값은 기본값("L3")으로 치환한다.
-     * - 향후 코드 체계가 바뀌어도 이 메소드만 수정하면 되도록 중앙집중화한다.
      */
     private String normalizeLoanPreference(String loanPreference) {
         if (loanPreference == null) return "L3";
 
         String p = loanPreference.trim().toUpperCase();
 
-        // 프론트 3단계
         if (p.equals("CONSERVATIVE")) return "L2";
         if (p.equals("BALANCED"))     return "L3";
         if (p.equals("AGGRESSIVE"))   return "L4";
 
-        // 기존/다른 입력값 (혹시 남아있다면)
         if (p.equals("NONE")) return "L1";
         if (p.equals("MAX"))  return "L5";
 
-        // 이미 L1~L5로 온 경우 그대로
         if (p.matches("^L[1-5]$")) return p;
 
-        // 알 수 없는 값은 중립으로
         return "L3";
     }
 
@@ -94,65 +94,135 @@ public class SimulatorServiceImpl implements SimulatorService {
             throw new IllegalArgumentException("프로필 로드 실패: " + e.getMessage(), e);
         }
 
-        // 3) 정책 목록 로드
-
-     // 1) 자격/목록 생성
         PolicyImpactCalculator.PolicyResult policyResult =
                 policyImpactCalculator.evaluateEligibility(profile, req.getSelectedPolicyIds());
 
-      
-        CostResultEntity costResult = new CostResultEntity(); // 이미 만들어진/조회된 인스턴스
+        MergedInput merged = inputMergeService.merge(profile, req, 0L, 0L);
 
-        // 2) base가 있으면 영향 계산(없으면 null로 호출해도 됨)
-       // 1️⃣ 필요한 값들만 먼저 정리
-       // costResult는 "이미 계산이 끝난" CostResultEntity (세금/대출금액이 채워진 상태)
-        long loanBaseAmount = costResult.getLoanAmount() == null ? 0L : costResult.getLoanAmount().longValue();
-        long taxBaseAmount  = costResult.getTaxAmount()  == null ? 0L : costResult.getTaxAmount().longValue();
+        // =======================================================
+        // (A) before/after finance 계산
+        // =======================================================
+
+        // 1) baseline (INPUT 미적용)
+        FinanceCalculator.FinanceInput beforeInput = merged.getFinanceInput().copy();
+        FinanceResult beforeFinance = financeCalculator.calculate(beforeInput);
+
+        long baselineLoanLimit = beforeFinance.getLoanLimit();
+        long baselineMonthlyPayment = beforeFinance.getEstimatedMonthlyPayment();
+
+        dbg("[BASELINE] baselineLoanLimit=" + baselineLoanLimit
+                + ", baselineMonthlyPayment=" + baselineMonthlyPayment
+                + ", downPayment=" + beforeFinance.getDownPayment()
+                + ", cashAvailable=" + profile.getCashAvailable()
+                + ", emergencyFund=" + profile.getEmergencyFund());
+
+        // 2) after (INPUT 적용: baseline 포함)
+        FinanceCalculator.FinanceInput afterInput = merged.getFinanceInput().copy();
+
+        // baseline을 넘겨야 LTV_BONUS 같은 환산형 INPUT이 스킵되지 않습니다.
+        policyImpactCalculator.applyInputModifiers(policyResult, afterInput, baselineLoanLimit);
+
+        FinanceResult afterFinance = financeCalculator.calculate(afterInput);
+        FinanceResult finance = afterFinance;
+
+        // =======================================================
+        // 비용 계산용 가격 결정
+        // =======================================================
+        Long requestedPrice = req.getTargetPropertyPrice();
+
+        boolean isTargetMode =
+                finance.getMaxAffordableAtTarget() > 0
+                        && finance.getMaxAffordableAtTarget() != finance.getMaxAffordableNow();
+
+        BigDecimal priceForCost;
+        boolean estimatedPrice;
+
+        if (requestedPrice != null) {
+            priceForCost = BigDecimal.valueOf(requestedPrice);
+            estimatedPrice = false;
+        } else {
+            long assumed = isTargetMode
+                    ? finance.getMaxAffordableAtTarget()
+                    : finance.getMaxAffordableNow();
+            priceForCost = BigDecimal.valueOf(assumed);
+            estimatedPrice = true;
+        }
+
+        dbg("[PRICE] requestedPrice=" + requestedPrice
+                + ", isTargetMode=" + isTargetMode
+                + ", priceForCost=" + (priceForCost == null ? "null" : priceForCost.toPlainString())
+                + ", estimatedPrice=" + estimatedPrice);
+
+        // 3) 비용 계산
+        // - taxAmount는 현재 CostResultCalculator 내부에서 price 기반으로만 계산되지만,
+        //   추후 확장(정책/규제 반영 등)을 고려해 before/after 를 분리해둡니다.
+        CostResultEntity beforeCost = null;
+        CostResultEntity afterCost = null;
+        if (priceForCost != null) {
+            beforeCost = costResultCalculator.calculate(priceForCost, beforeFinance);
+            afterCost = costResultCalculator.calculate(priceForCost, finance);
+        }
+
+        long beforeTax = (beforeCost == null)
+                ? 0L
+                : ValueConvertUtils.toLong(beforeCost.getTaxAmount());
+
+        long afterTax = (afterCost == null)
+                ? 0L
+                : ValueConvertUtils.toLong(afterCost.getTaxAmount());
+
+        dbg("[COST] beforeTaxAmount=" + beforeTax
+                + ", afterTaxAmount=" + afterTax
+                + ", costResult=" + (afterCost == null ? "null" : "ok"));
 
         PolicyImpactCalculator.PolicyBase base =
-            PolicyImpactCalculator.PolicyBase.builder()
-                .loanBaseAmount(loanBaseAmount)
-                .taxBaseAmount(taxBaseAmount)
-                .build();
+                PolicyImpactCalculator.PolicyBase.builder()
+                        .loanBaseAmount(finance.getLoanLimit())
+                        .taxBaseAmount(afterTax)
+                        .monthlyBaseAmount(finance.getEstimatedMonthlyPayment())
+                        .build();
 
-        // 이제 CostResultEntity를 PolicyImpactCalculator로 넘기지 않음
+        // ✅ RESULT delta + (전체 INPUT 적용에 따른 before/after 차이) 합산
         PolicyImpactCalculator.PolicyImpactResult impactResult =
-        	    policyImpactCalculator.applyImpact(policyResult, base);
-
-        // 3) merge는 impactResult 합산치로
-        MergedInput merged = inputMergeService.merge(
-                profile, req,
-                impactResult.getTotalLoanDelta(),
-                impactResult.getTotalMonthlyDelta()
+                policyImpactCalculator.applyImpactAndAddInputDelta(
+                        policyResult,
+                        base,
+                        baselineLoanLimit,
+                        afterFinance.getLoanLimit(),
+                        baselineMonthlyPayment,
+                        afterFinance.getEstimatedMonthlyPayment(),
+                        beforeTax,
+                        afterTax
                 );
-          
-        // 5) 재무 계산(Real)
-        FinanceResult finance = financeCalculator.calculate(merged.getFinanceInput());
 
-        // 6) 점수/레벨 계산(요약에 쓰고 싶을 때 확장 가능)
+        dbg("[IMPACT_TOTAL] totalLoanDelta=" + (impactResult == null ? "null" : impactResult.getTotalLoanDelta())
+                + ", totalMonthlyDelta=" + (impactResult == null ? "null" : impactResult.getTotalMonthlyDelta())
+                + ", totalTaxDelta=" + (impactResult == null ? "null" : impactResult.getTotalTaxDelta()));
+
+        // =======================================================
+        // 6) 점수/레벨 계산
         ScoreResult score = financeScorer.score(
                 finance,
                 ScoreInput.builder().targetPropertyPrice(req.getTargetPropertyPrice()).build()
         );
 
-        // 7) SummaryDto 조립(프론트가 쓰는 필드만)
+        // 7) SummaryDto 조립
         SummaryDto summary = SummaryDto.builder()
                 .purchaseRange(formatWonRange(finance.getPurchaseRangeLow(), finance.getPurchaseRangeHigh()))
                 .assetSafety(finance.getAssetSafety())
                 .goalFeasibility(finance.getGoalFeasibility())
                 .monthlyBurdenRatio(finance.getMonthlyBurdenRatio())
                 .build();
-        
+
         FinanceSnapshotDto snapshot = FinanceSnapshotDto.builder()
                 .userId(req.getUserId())
-                // 아래는 ProfileSnapshot이 제공하는 getter에 맞춰 바꾸세요
                 .annualIncome(profile.getAnnualIncome())
                 .assetAmount(profile.getAssetAmount())
                 .debtAmount(profile.getDebtAmount())
                 .cashAvailable(profile.getCashAvailable())
                 .emergencyFund(profile.getEmergencyFund())
                 .monthlyHousingBudget(profile.getMonthlyHousingBudget())
-                .loanPreference(req.getLoanPreference()) // 정규화된 값
+                .loanPreference(req.getLoanPreference())
                 .targetMonths(req.getTargetMonths())
                 .targetPropertyPrice(ValueConvertUtils.toBigDecimal(req.getTargetPropertyPrice()))
                 .build();
@@ -162,7 +232,7 @@ public class SimulatorServiceImpl implements SimulatorService {
 
         return SimulationCalculateResponseDto.builder()
                 .summaryDto(summary)
-                .policyList(policyResult.getPolicyList())
+                .policyList(impactResult.getPolicyList())
                 .appliedPolicyIds(impactResult.getAppliedPolicyIds())
                 .financeSnapshot(snapshot)
                 .explanation(explanation)
@@ -178,13 +248,14 @@ public class SimulatorServiceImpl implements SimulatorService {
 
     private String buildExplanation(
             SimulationCalculateRequestDto req,
-            PolicyImpactResult policyResult,
-            FinanceResult finance,
-            ScoreResult score
+            PolicyImpactResult impactResult,
+            FinanceCalculator.FinanceResult finance,
+            FinanceScorer.ScoreResult score
     ) {
-        int selectedCount = (policyResult.getAppliedPolicyIds() == null) ? 0 : policyResult.getAppliedPolicyIds().size();
-        long loanDelta = policyResult.getTotalLoanDelta();
-        long monthlyDelta = policyResult.getTotalMonthlyDelta();
+    	int selectedCount = (impactResult.getAppliedPolicyIds() == null) ? 0 : impactResult.getAppliedPolicyIds().size();
+
+    	long loanDelta = impactResult.getPreviewTotalLoanDelta();
+    	long monthlyDelta = impactResult.getPreviewTotalMonthlyDelta();
 
         String pref = (req.getLoanPreference() == null || req.getLoanPreference().isBlank())
                 ? "미입력"
@@ -192,15 +263,14 @@ public class SimulatorServiceImpl implements SimulatorService {
 
         int months = (req.getTargetMonths() == null) ? 0 : req.getTargetMonths();
 
-        // ScoreResult는 현재 SummaryDto에 넣진 않지만, 설명에는 표시(원치 않으면 제거 가능)
         int overall = (score == null) ? 0 : score.getOverallScore();
 
         return String.format(
                 "정책 %d개를 반영했습니다. (대출 한도 변화: %+,d원 / 월부담 변화: %+,d원)\n" +
-                "대출 성향: %s, 목표 시점: %d개월\n" +
-                "다운페이: %,d원, 대출한도: %,d원, 필요대출(추정): %,d원\n" +
-                "예상 월상환(추정): %,d원, 월부담비율: %s\n" +
-                "종합점수(임시): %d점",
+                        "대출 성향: %s, 목표 시점: %d개월\n" +
+                        "다운페이: %,d원, 대출한도: %,d원, 필요대출(추정): %,d원\n" +
+                        "예상 월상환(추정): %,d원, 월부담비율: %s\n" +
+                        "종합점수(임시): %d점",
                 selectedCount, loanDelta, monthlyDelta,
                 pref, months,
                 finance.getDownPayment(), finance.getLoanLimit(), finance.getNeededLoan(),
@@ -208,4 +278,5 @@ public class SimulatorServiceImpl implements SimulatorService {
                 overall
         );
     }
+
 }
