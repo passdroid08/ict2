@@ -13,7 +13,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class PolicyImpactDto {
+public class PolicyImpactViewDto {
 	
 	private Long policyId;
 	private String name;

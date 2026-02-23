@@ -19,7 +19,7 @@ public class SimulationCalculateResponseDto {
 	private SummaryDto summaryDto;
 	private FinanceSnapshotDto financeSnapshot;
 	
-    private List<PolicyImpactDto> policyList;
+    private List<PolicyImpactViewDto> policyList;
     private List<Long> appliedPolicyIds;
     
     private String explanation;

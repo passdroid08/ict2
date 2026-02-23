@@ -1,15 +1,18 @@
 package com.ict.project.simulator.service;
 
+import org.slf4j.Logger;
+
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
+
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.ict.project.policy.cal.PolicyImpactCalculator;
 import com.ict.project.policy.dto.PolicyBaseDto;
 import com.ict.project.policy.dto.PolicyImpactResultDto;
-import com.ict.project.policy.dto.PolicyResultDto;
 import com.ict.project.simulator.calc.CostResultCalculator;
 import com.ict.project.simulator.calc.FinanceCalculator;
 import com.ict.project.simulator.calc.FinanceScorer;
@@ -34,29 +37,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Transactional
 public class SimulatorServiceImpl implements SimulatorService {
-
+	
     private final ProfileService profileService;
     private final CostResultCalculator costResultCalculator;
-    private final PolicyImpactCalculator policyImpactCalculator;
     private final InputMergeService inputMergeService;
     private final FinanceCalculator financeCalculator;
-    private final FinanceScorer financeScorer;
-
-    private String normalizeLoanPreference(String loanPreference) {
-        if (loanPreference == null) {
-            return "L3";
-        }
-
-        String p = loanPreference.trim().toUpperCase();
-        if (p.equals("CONSERVATIVE")) return "L2";
-        if (p.equals("BALANCED")) return "L3";
-        if (p.equals("AGGRESSIVE")) return "L4";
-        if (p.equals("NONE")) return "L1";
-        if (p.equals("MAX")) return "L5";
-        if (p.matches("^L[1-5]$")) return p;
-
-        return "L3";
-    }
+    private final FinanceScorer financeScorer; 
 
     @Override
     public SimulationCalculateResponseDto calculate(SimulationCalculateRequestDto request) {
@@ -77,21 +63,19 @@ public class SimulatorServiceImpl implements SimulatorService {
         ProfileSnapshotDto profile = profileService.loadProfileSnapshot(userId);
         
         //정책 목록 만들기
-        PolicyResultDto policyResult =
-                policyImpactCalculator.evaluateEligibility(profile, req.getSelectedPolicyIds());
-        
+                
         //유저 재무 정보 + 재계산시 Form 입력 합치기
         MergedInput merged = inputMergeService.merge(profile, req, 0L, 0L);
         
         
         FinanceInputDto beforeInput = merged.getFinanceInput();
         FinanceResultDto beforeFinance = financeCalculator.calculate(beforeInput);
-
+        
         long baselineLoanLimit = beforeFinance.getLoanLimit();
-        long baselineMonthlyPayment = beforeFinance.getEstimatedMonthlyPayment();
+        long baselineMonthlyPayment = beforeFinance.getEstimatedMonthlyPayment();    
+        
+        FinanceInputDto afterInput = copyFinanceInput(beforeInput);      
 
-        FinanceInputDto afterInput = copyFinanceInput(beforeInput);
-        policyImpactCalculator.applyInputModifiers(policyResult, afterInput, baselineLoanLimit);
 
         FinanceResultDto afterFinance = financeCalculator.calculate(afterInput);
 
@@ -114,16 +98,16 @@ public class SimulatorServiceImpl implements SimulatorService {
                 .monthlyBaseAmount(afterFinance.getEstimatedMonthlyPayment())
                 .build();
 
-        PolicyImpactResultDto impactResult = policyImpactCalculator.applyImpactAndAddInputDelta(
-                policyResult,
-                base,
-                baselineLoanLimit,
-                afterFinance.getLoanLimit(),
-                baselineMonthlyPayment,
-                afterFinance.getEstimatedMonthlyPayment(),
-                beforeTax,
-                afterTax
-        );
+//        PolicyImpactResultDto impactResult = policyImpactCalculator.applyImpactAndAddInputDelta(
+//                policyResult,
+//                base,
+//                baselineLoanLimit,
+//                afterFinance.getLoanLimit(),
+//                baselineMonthlyPayment,
+//                afterFinance.getEstimatedMonthlyPayment(),
+//                beforeTax,
+//                afterTax
+//        );
 
         ScoreResultDto score = financeScorer.score(
                 afterFinance,
@@ -150,14 +134,14 @@ public class SimulatorServiceImpl implements SimulatorService {
                 .targetPropertyPrice(ValueConvertUtils.toBigDecimal(req.getTargetPropertyPrice()))
                 .build();
 
-        String explanation = buildExplanation(req, impactResult, afterFinance, score);
+//        String explanation = buildExplanation(req, impactResult, afterFinance, score);
 
         return SimulationCalculateResponseDto.builder()
                 .summaryDto(summary)
-                .policyList(impactResult.getPolicyList())
-                .appliedPolicyIds(impactResult.getAppliedPolicyIds())
-                .financeSnapshot(snapshot)
-                .explanation(explanation)
+//                .policyList(impactResult.getPolicyList())
+//                .appliedPolicyIds(impactResult.getAppliedPolicyIds())
+//                .financeSnapshot(snapshot)
+//                .explanation(explanation)
                 .calculatedAt(LocalDateTime.now())
                 .build();
     }
@@ -179,6 +163,22 @@ public class SimulatorServiceImpl implements SimulatorService {
                 .annualInterestRate(source.getAnnualInterestRate())
                 .loanTermMonths(source.getLoanTermMonths())
                 .build();
+    }
+    
+    private String normalizeLoanPreference(String loanPreference) {
+        if (loanPreference == null) {
+            return "L3";
+        }
+
+        String p = loanPreference.trim().toUpperCase();
+        if (p.equals("CONSERVATIVE")) return "L2";
+        if (p.equals("BALANCED")) return "L3";
+        if (p.equals("AGGRESSIVE")) return "L4";
+        if (p.equals("NONE")) return "L1";
+        if (p.equals("MAX")) return "L5";
+        if (p.matches("^L[1-5]$")) return p;
+
+        return "L3";
     }
 
     private String formatWonRange(long low, long high) {
