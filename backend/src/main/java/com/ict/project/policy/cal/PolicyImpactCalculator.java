@@ -1,357 +1,234 @@
 package com.ict.project.policy.cal;
 
-import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.ict.project.policy.dto.EligibilityResultDto;
 import com.ict.project.policy.dto.PolicyBaseDto;
-import com.ict.project.policy.dto.PolicyImpactResultDto;
-import com.ict.project.policy.dto.PolicyResultDto;
 import com.ict.project.policy.dto.ResultDeltaDto;
 import com.ict.project.policy.entity.PolicyEffectEntity;
-import com.ict.project.policy.entity.PolicyEntity;
 import com.ict.project.policy.repository.PolicyEffectRepository;
-import com.ict.project.policy.repository.PolicyRepository;
-import com.ict.project.simulator.dto.PolicyImpactDto;
-import com.ict.project.simulator.dto.ProfileSnapshotDto;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
-public class PolicyImpactCalculator {
+public class PolicyResultImpactCalculator {
 
-    private static final Logger log = LoggerFactory.getLogger(PolicyImpactCalculator.class);
-    private static final boolean DBG = true;
-
-    private static final String STATUS_APPLICABLE = "Applicable";
-    private static final String STATUS_NOT_APPLICABLE = "NotApplicable";
-
-    private final PolicyRepository policyRepository;
     private final PolicyEffectRepository effectRepository;
-    private final PolicyEligibilityEvaluator eligibilityEvaluator;
-    private final PolicyInputModifierApplier inputModifierApplier;
-    private final PolicyResultImpactCalculator resultImpactCalculator;
 
-    public PolicyResultDto evaluateEligibility(ProfileSnapshotDto profile, List<Long> selectedPolicyIds) {
-        List<Long> selected = (selectedPolicyIds == null) ? List.of() : selectedPolicyIds;
+    // =========================================================
+    // RESULT 단계 계산 기준값
+    // - RESULT 정책 중 MULTIPLY/REPLACE는 "기준값"이 필요합니다.
+    // =========================================================
+    
 
-        List<PolicyEntity> policies;
-        try {
-            policies = policyRepository.findAll();
-        } catch (Exception e) {
-            err("policyRepository.findAll() failed", e);
-            policies = List.of();
-        }
-        if (policies == null) {
-            policies = List.of();
-        }
+    /**
+     * DB에서 policyId의 RESULT 효과만 조회하여,
+     * base 기준으로 delta(변화량)만 계산해 반환합니다.
+     *
+     * - effectStage == "RESULT" 만 사용
+     * - priority 오름차순 적용(낮을수록 먼저)
+     * - operator: ADD/SUB/MULTIPLY/REPLACE(+ 별칭) 지원
+     *
+     * 주의:
+     * - INPUT 효과(LTV_BONUS 등)는 여기서 절대 loanDelta에 반영하지 않습니다.
+     *   (INPUT 영향은 SimulatorServiceImpl에서 assumed diff 방식으로만 계산)
+     */
+    public ResultDeltaDto computeResultDeltaFromDb(Long policyId, PolicyBaseDto base, List<String> reasons) {
 
-        List<PolicyImpactDto> policyList = new ArrayList<>();
-
-        for (PolicyEntity policy : policies) {
-            if (policy == null) {
-                continue;
-            }
-
-            Long policyId = policy.getPolicyId();
-            boolean isSelected = policyId != null && selected.contains(policyId);
-
-            EligibilityResultDto eligibility;
-            try {
-                eligibility = eligibilityEvaluator.evaluate(profile, policy);
-            } catch (Exception e) {
-                err("eligibilityEvaluator.evaluate() failed for policyId=" + policyId, e);
-                eligibility = EligibilityResultDto.builder()
-                        .applicable(false)
-                        .reasons(List.of("Eligibility evaluation failed"))
-                        .conditions(List.of())
-                        .build();
-            }
-
-            String reasonSummary = eligibility.isApplicable() ? STATUS_APPLICABLE : STATUS_NOT_APPLICABLE;
-            List<String> reasons = new ArrayList<>();
-            reasons.add(isSelected ? "Selected" : "Not selected");
-            reasons.addAll(defaultList(eligibility.getReasons()));
-            reasons.add(reasonSummary);
-
-            policyList.add(PolicyImpactDto.builder()
-                    .policyId(policyId)
-                    .name(policy.getPolicyName())
-                    .impactAmount(0L)
-                    .impactPercent(null)
-                    .monthlyImpact(0L)
-                    .reasons(reasons)
-                    .reasonSummary(reasonSummary)
-                    .conditions(defaultList(eligibility.getConditions()))
-                    .caution(null)
-                    .build());
-        }
-
-        return PolicyResultDto.builder()
-                .policyList(policyList)
-                .selectedPolicyIds(selected)
-                .build();
-    }
-
-    public PolicyImpactResultDto applyImpact(PolicyResultDto policyResult, PolicyBaseDto base) {
-        if (policyResult == null) {
-            return PolicyImpactResultDto.builder()
-                    .previewTotalLoanDelta(0L)
-                    .previewTotalMonthlyDelta(0L)
-                    .previewTotalTaxDelta(0L)
-                    .totalLoanDelta(0L)
-                    .totalMonthlyDelta(0L)
-                    .totalTaxDelta(0L)
-                    .appliedPolicyIds(List.of())
-                    .policyList(List.of())
-                    .build();
-        }
-
-        List<PolicyImpactDto> list = defaultList(policyResult.getPolicyList());
-        List<Long> selected = defaultList(policyResult.getSelectedPolicyIds());
-
-        PolicyBaseDto calcBase = PolicyBaseDto.builder()
-                .loanBaseAmount(base == null ? 0L : base.getLoanBaseAmount())
-                .taxBaseAmount(base == null ? 0L : base.getTaxBaseAmount())
-                .monthlyBaseAmount(base == null ? 0L : base.getMonthlyBaseAmount())
-                .build();
-
-        long previewLoan = 0L;
-        long previewMonthly = 0L;
-        long previewTax = 0L;
-
-        long appliedLoan = 0L;
-        long appliedMonthly = 0L;
-        long appliedTax = 0L;
-
-        List<Long> appliedPolicyIds = new ArrayList<>();
-        List<PolicyImpactDto> out = new ArrayList<>();
-
-        for (PolicyImpactDto dto : list) {
-            if (dto == null) {
-                continue;
-            }
-
-            Long policyId = dto.getPolicyId();
-            boolean isSelected = policyId != null && selected.contains(policyId);
-            boolean applicable = STATUS_APPLICABLE.equals(dto.getReasonSummary());
-
-            List<String> reasons = new ArrayList<>(defaultList(dto.getReasons()));
-
-            ResultDeltaDto delta;
-            try {
-                delta = resultImpactCalculator.computeResultDeltaFromDb(policyId, calcBase, reasons);
-            } catch (Exception e) {
-                err("computeResultDeltaFromDb() failed for policyId=" + policyId, e);
-                delta = ResultDeltaDto.builder()
-                        .loanDelta(0L)
-                        .monthlyDelta(0L)
-                        .taxDelta(0L)
-                        .build();
-                reasons.add("Failed to calculate impact; defaulted to 0");
-            }
-
-            if (!applicable) {
-                reasons.add("Policy not applicable; impact shown as preview only");
-            }
-
-            if (applicable) {
-                previewLoan += delta.getLoanDelta();
-                previewMonthly += delta.getMonthlyDelta();
-                previewTax += delta.getTaxDelta();
-            }
-
-            if (applicable && isSelected) {
-                appliedLoan += delta.getLoanDelta();
-                appliedMonthly += delta.getMonthlyDelta();
-                appliedTax += delta.getTaxDelta();
-                appliedPolicyIds.add(policyId);
-            }
-
-            out.add(PolicyImpactDto.builder()
-                    .policyId(policyId)
-                    .name(dto.getName())
-                    .impactAmount(delta.getLoanDelta())
-                    .impactPercent(null)
-                    .monthlyImpact(delta.getMonthlyDelta())
-                    .reasons(reasons)
-                    .reasonSummary(dto.getReasonSummary())
-                    .conditions(dto.getConditions())
-                    .caution(dto.getCaution())
-                    .build());
-        }
-
-        return PolicyImpactResultDto.builder()
-                .previewTotalLoanDelta(previewLoan)
-                .previewTotalMonthlyDelta(previewMonthly)
-                .previewTotalTaxDelta(previewTax)
-                .totalLoanDelta(appliedLoan)
-                .totalMonthlyDelta(appliedMonthly)
-                .totalTaxDelta(appliedTax)
-                .appliedPolicyIds(appliedPolicyIds)
-                .policyList(out)
-                .build();
-    }
-
-    public PolicyImpactResultDto applyImpactAndAddInputDelta(
-            PolicyResultDto policyResult,
-            PolicyBaseDto base,
-            long beforeLoanLimit,
-            long afterLoanLimit,
-            long beforeMonthlyPayment,
-            long afterMonthlyPayment,
-            long beforeTaxAmount,
-            long afterTaxAmount
-    ) {
-        PolicyImpactResultDto result = applyImpact(policyResult, base);
-
-        long inputLoanDelta = afterLoanLimit - beforeLoanLimit;
-        long inputMonthlyDelta = afterMonthlyPayment - beforeMonthlyPayment;
-        long inputTaxDelta = afterTaxAmount - beforeTaxAmount;
-
-        if (result == null) {
-            return PolicyImpactResultDto.builder()
-                    .previewTotalLoanDelta(0L)
-                    .previewTotalMonthlyDelta(0L)
-                    .previewTotalTaxDelta(0L)
-                    .totalLoanDelta(inputLoanDelta)
-                    .totalMonthlyDelta(inputMonthlyDelta)
-                    .totalTaxDelta(inputTaxDelta)
-                    .appliedPolicyIds(List.of())
-                    .policyList(List.of())
-                    .build();
-        }
-
-        return PolicyImpactResultDto.builder()
-                .previewTotalLoanDelta(result.getPreviewTotalLoanDelta())
-                .previewTotalMonthlyDelta(result.getPreviewTotalMonthlyDelta())
-                .previewTotalTaxDelta(result.getPreviewTotalTaxDelta())
-                .totalLoanDelta(result.getTotalLoanDelta() + inputLoanDelta)
-                .totalMonthlyDelta(result.getTotalMonthlyDelta() + inputMonthlyDelta)
-                .totalTaxDelta(result.getTotalTaxDelta() + inputTaxDelta)
-                .appliedPolicyIds(result.getAppliedPolicyIds())
-                .policyList(result.getPolicyList())
-                .build();
-    }
-
-    public <T> T applyInputModifiers(PolicyResultDto policyResult, T financeInput) {
-        return applyInputModifiers(policyResult, financeInput, null);
-    }
-
-    public <T> T applyInputModifiers(PolicyResultDto policyResult, T financeInput, Long baselineLoanLimit) {
-        if (policyResult == null || financeInput == null) {
-            return financeInput;
-        }
-
-        List<PolicyImpactDto> list = defaultList(policyResult.getPolicyList());
-        List<Long> selected = defaultList(policyResult.getSelectedPolicyIds());
-
-        for (PolicyImpactDto dto : list) {
-            if (dto == null) {
-                continue;
-            }
-
-            Long policyId = dto.getPolicyId();
-            boolean isSelected = policyId != null && selected.contains(policyId);
-            boolean applicable = STATUS_APPLICABLE.equals(dto.getReasonSummary());
-
-            if (!isSelected || !applicable) {
-                continue;
-            }
-
-            try {
-                financeInput = inputModifierApplier.applyInputEffectsForPolicy(policyId, financeInput, baselineLoanLimit);
-            } catch (Exception e) {
-                err("applyInputEffectsForPolicy() failed for policyId=" + policyId, e);
-            }
-        }
-
-        return financeInput;
-    }
-
-    public boolean hasInputTargetField(Long policyId, String targetField) {
         if (policyId == null) {
-            return false;
+            return new ResultDeltaDto(0L, 0L, 0L);
         }
 
-        String key = safeUpper(targetField);
-        if (key == null) {
-            return false;
-        }
+        List<PolicyEffectEntity> effects = effectRepository.findByPolicy_PolicyId(policyId);
+        if (effects == null) effects = List.of();
 
-        List<PolicyEffectEntity> effects;
-        try {
-            effects = effectRepository.findByPolicy_PolicyId(policyId);
-        } catch (Exception e) {
-            err("findByPolicy_PolicyId() failed for policyId=" + policyId, e);
-            return false;
-        }
+        // RESULT만 필터 + priority 정렬(낮을수록 먼저)
+        List<PolicyEffectEntity> resultEffects = effects.stream()
+                .filter(e -> e != null)
+                .filter(e -> "RESULT".equalsIgnoreCase(safeTrim(e.getEffectStage())))
+                .sorted(Comparator.comparingInt(e -> (e.getPriority() == null) ? 100 : e.getPriority()))
+                .toList();
 
-        for (PolicyEffectEntity effect : defaultList(effects)) {
-            if (effect == null) {
+        long loanBase = (base == null) ? 0L : base.getLoanBaseAmount();
+        long taxBase = (base == null) ? 0L : base.getTaxBaseAmount();
+        long monthlyBase = (base == null) ? 0L : base.getMonthlyBaseAmount();
+
+        long loanDeltaSum = 0L;
+        long taxDeltaSum = 0L;
+        long monthlyDeltaSum = 0L;
+
+        for (PolicyEffectEntity effect : resultEffects) {
+
+            String rawTarget = effect.getTargetField();
+            String target = normalizeResultTarget(rawTarget); // alias 매핑
+            String op = effect.getOperator();                 // normalize는 calc에서 처리
+
+            BigDecimal vNum = effect.getEffectValueNum();
+
+            if (target == null || op == null) continue;
+
+            if (vNum == null) {
+                addReason(reasons, "정책 효과 값(NUM) 누락: " + target);
                 continue;
             }
-            if (!"INPUT".equalsIgnoreCase(safeTrim(effect.getEffectStage()))) {
+
+            // INPUT 전용 키가 RESULT로 들어온 경우는 무시(중복/오염 방지)
+            if ("INPUT_ONLY".equals(target)) {
+                addReason(reasons, "INPUT 전용 EffectKey/Target이 RESULT로 들어옴: " + safeUpper(rawTarget));
                 continue;
             }
 
-            String target = safeUpper(effect.getTargetField());
-            String effectKey = safeUpper(effect.getEffectKey());
-            if (key.equals(target) || key.equals(effectKey)) {
-                return true;
+            switch (target) {
+                case "LOAN_LIMIT": {
+                    long delta = calcDeltaWithOperator(loanBase, op, vNum, reasons, "LOAN_LIMIT");
+                    loanDeltaSum += delta;
+                    break;
+                }
+                case "TAX_AMOUNT": {
+                    long delta = calcDeltaWithOperator(taxBase, op, vNum, reasons, "TAX_AMOUNT");
+                    taxDeltaSum += delta;
+                    break;
+                }
+                case "MONTHLY_PAYMENT": {
+                    long delta = calcDeltaWithOperator(monthlyBase, op, vNum, reasons, "MONTHLY_PAYMENT");
+                    monthlyDeltaSum += delta;
+                    break;
+                }
+                default:
+                    addReason(reasons, "RESULT 단계에서 지원하지 않는 targetField: " + target);
+                    break;
             }
         }
 
-        return false;
+        return new ResultDeltaDto(loanDeltaSum, monthlyDeltaSum, taxDeltaSum);
     }
 
-    public boolean hasAnyInputEffects(Long policyId) {
-        if (policyId == null) {
-            return false;
+    // =========================================================
+    // normalize / operator / delta helpers
+    // =========================================================
+    private String normalizeResultTarget(String targetField) {
+        String t = safeUpper(targetField);
+        if (t == null) return null;
+
+        // 🔹 대출 관련
+        if ("MAX_LOAN_AMOUNT".equals(t)) return "LOAN_LIMIT";
+        if ("LOAN_LIMIT".equals(t)) return "LOAN_LIMIT";
+
+        // 🔹 월 상환액
+        if ("MONTHLY_PAYMENT".equals(t)) return "MONTHLY_PAYMENT";
+
+        // 🔹 취득세
+        if ("ACQUISITION_TAX_REDUCTION".equals(t)) return "TAX_AMOUNT";
+        if ("TAX_AMOUNT".equals(t)) return "TAX_AMOUNT";
+
+        // 🔹 INPUT 전용 키가 RESULT로 들어온 경우(오염 방지)
+        if ("LTV_BONUS".equals(t) || "LTV_LIMIT".equals(t) || "LOAN_DELTA".equals(t) || "MONTHLY_DELTA".equals(t) || "TAX_DELTA".equals(t)) {
+            return "INPUT_ONLY";
         }
 
-        List<PolicyEffectEntity> effects;
+        return t;
+    }
+
+    /**
+     * baseValue에 operator/valueNum을 적용했을 때의 "변화량(delta)"를 반환합니다.
+     *
+     * - ADD: delta = valueNum
+     * - SUB: delta = -valueNum
+     * - MULTIPLY: new = base * valueNum -> delta = new - base
+     * - REPLACE: new = valueNum -> delta = new - base
+     */
+    private long calcDeltaWithOperator(long baseValue, String op, BigDecimal valueNum, List<String> reasons, String label) {
+        String operator = normalizeOperator(op);
+        String safeLabel = (label == null || label.isBlank()) ? "UNKNOWN" : label;
+
+        if (!validateEffectInputs(operator, valueNum, reasons, safeLabel)) {
+            return 0L;
+        }
+
         try {
-            effects = effectRepository.findByPolicy_PolicyId(policyId);
-        } catch (Exception e) {
-            err("findByPolicy_PolicyId() failed for policyId=" + policyId, e);
-            return false;
-        }
-
-        for (PolicyEffectEntity effect : defaultList(effects)) {
-            if (effect != null && "INPUT".equalsIgnoreCase(safeTrim(effect.getEffectStage()))) {
-                return true;
+            switch (operator) {
+                case "ADD":
+                    return safeLong(valueNum);
+                case "SUB":
+                    return -safeLong(valueNum);
+                case "MULTIPLY":
+                    return multiplyDelta(baseValue, valueNum);
+                case "REPLACE":
+                    return replaceDelta(baseValue, valueNum);
+                default:
+                    addReason(reasons, "지원하지 않는 OPERATOR(" + safeLabel + "): " + operator);
+                    return 0L;
             }
-        }
-
-        return false;
-    }
-
-    public <T> T applyInputEffectsForPolicy(Long policyId, T financeInput) {
-        try {
-            return inputModifierApplier.applyInputEffectsForPolicy(policyId, financeInput);
         } catch (Exception e) {
-            err("applyInputEffectsForPolicy() failed policyId=" + policyId, e);
-            return financeInput;
+            addReason(reasons, "정책 효과 계산 실패(" + safeLabel + "): " + e.getClass().getSimpleName());
+            return 0L;
         }
     }
 
-    public <T> T applyInputEffectsForPolicy(Long policyId, T financeInput, Long baselineLoanLimit) {
-        try {
-            return inputModifierApplier.applyInputEffectsForPolicy(policyId, financeInput, baselineLoanLimit);
-        } catch (Exception e) {
-            err("applyInputEffectsForPolicy(baseline) failed policyId=" + policyId, e);
-            return financeInput;
+    private boolean validateEffectInputs(String operator, BigDecimal valueNum, List<String> reasons, String label) {
+        if (operator == null) {
+            addReason(reasons, "OPERATOR 누락(" + label + ")");
+            return false;
         }
+        if (valueNum == null) {
+            addReason(reasons, "EFFECT_VALUE_NUM 누락(" + label + ")");
+            return false;
+        }
+        return true;
     }
 
-    private <T> List<T> defaultList(List<T> list) {
-        return (list == null) ? List.of() : list;
+    private String normalizeOperator(String op) {
+        if (op == null) return null;
+
+        String s = op.trim();
+        if (s.isEmpty()) return null;
+
+        s = s.toUpperCase();
+
+        // 기호
+        if ("+".equals(s)) return "ADD";
+        if ("-".equals(s)) return "SUB";
+        if ("*".equals(s) || "X".equals(s)) return "MULTIPLY";
+
+        // 별칭/축약
+        if ("MUL".equals(s) || "MULT".equals(s)) return "MULTIPLY";
+        if ("PLUS".equals(s) || "ADD".equals(s)) return "ADD";
+        if ("MINUS".equals(s) || "SUBTRACT".equals(s) || "SUB".equals(s)) return "SUB";
+        if ("REPL".equals(s) || "SET".equals(s)) return "REPLACE";
+
+        // 정식 값은 그대로 통과
+        return s;
+    }
+
+    private long safeLong(BigDecimal v) {
+        return v.setScale(0, RoundingMode.DOWN).longValueExact();
+    }
+
+    private long multiplyDelta(long baseValue, BigDecimal ratio) {
+        BigDecimal base = BigDecimal.valueOf(baseValue);
+        BigDecimal newValue = base.multiply(ratio);
+
+        long newLong = newValue.setScale(0, RoundingMode.DOWN).longValue();
+        return newLong - baseValue;
+    }
+
+    private long replaceDelta(long baseValue, BigDecimal newValue) {
+        long newLong = newValue.setScale(0, RoundingMode.DOWN).longValue();
+        return newLong - baseValue;
+    }
+
+    private void addReason(List<String> reasons, String message) {
+        if (reasons != null && message != null) {
+            reasons.add(message);
+        }
     }
 
     private String safeUpper(String s) {
@@ -364,11 +241,5 @@ public class PolicyImpactCalculator {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
-    }
-
-    private void err(String msg, Exception e) {
-        if (DBG) {
-            log.error("[PolicyImpactCalculator] {}", msg, e);
-        }
     }
 }
